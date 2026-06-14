@@ -127,14 +127,8 @@ require([
         return;
     Backbone.history.start();
     window._ = _;
-
-    /**
-     * Application instance with DE namespace defined
-     */
-    var app = new Backbone.Application({
-        nameSpace: 'DE',
-        autoCreate: false,
-        controllers : [
+    var previewLite = /(?:^|[?&])previewLite=1(?:&|$)/.test(window.location.search),
+        appControllers = [
             'Viewport',
             'DocumentHolder',
             'Toolbar',
@@ -168,58 +162,108 @@ require([
             ,'Common.Controllers.Protection'
             ,'Common.Controllers.Shortcuts'
             ,'Common.Controllers.PasteOptions'
-        ]
+        ],
+        requireModules = [
+            'common/main/lib/mods/dropdown',
+            'common/main/lib/mods/tooltip',
+            'common/main/lib/util/LocalStorage',
+            'common/main/lib/controller/Scaling',
+            'common/main/lib/controller/Themes',
+            'common/main/lib/controller/TabStyler',
+            'common/main/lib/controller/Desktop',
+            'documenteditor/main/app/controller/Viewport',
+            'documenteditor/main/app/controller/DocumentHolder',
+            'documenteditor/main/app/controller/Toolbar',
+            'documenteditor/main/app/controller/Statusbar',
+            'documenteditor/main/app/controller/FormsTab',
+            'documenteditor/main/app/controller/Links',
+            'documenteditor/main/app/controller/Navigation',
+            'documenteditor/main/app/controller/PageThumbnails',
+            'documenteditor/main/app/controller/RightMenu',
+            'documenteditor/main/app/controller/LeftMenu',
+            'documenteditor/main/app/controller/Main',
+            'documenteditor/main/app/controller/ViewTab',
+            'documenteditor/main/app/controller/HeaderFooterTab',
+            'documenteditor/main/app/controller/Search',
+            'documenteditor/main/app/controller/DocProtection',
+            'documenteditor/main/app/controller/Print',
+            'common/main/lib/util/utils',
+            'common/main/lib/controller/Fonts',
+            'common/main/lib/controller/ChartTab',
+            'common/main/lib/controller/History'
+            /** coauthoring begin **/
+            ,'common/main/lib/controller/Comments'
+            ,'common/main/lib/controller/Chat'
+            /** coauthoring end **/
+            ,'common/main/lib/controller/ExternalLinks'
+            ,'common/main/lib/controller/Plugins'
+            ,'common/main/lib/controller/ExternalDiagramEditor'
+            ,'common/main/lib/controller/ExternalMergeEditor'
+            ,'common/main/lib/controller/ExternalOleEditor'
+            ,'common/main/lib/controller/ReviewChanges'
+            ,'common/main/lib/controller/Protection'
+            ,'common/main/lib/controller/Shortcuts'
+            ,'common/main/lib/controller/Draw'
+            ,'common/main/lib/controller/PasteOptions'
+        ];
+
+    if (previewLite) {
+        var previewLiteControllers = [
+            'Viewport',
+            'DocumentHolder',
+            'Toolbar',
+            'Statusbar',
+            'LeftMenu',
+            'Main',
+            'ViewTab',
+            'Search',
+            'Print',
+            'Common.Controllers.Fonts',
+            'Common.Controllers.Shortcuts'
+        ];
+        var previewLiteModules = [
+            'common/main/lib/mods/dropdown',
+            'common/main/lib/mods/tooltip',
+            'common/main/lib/util/LocalStorage',
+            'common/main/lib/controller/Scaling',
+            'common/main/lib/controller/Themes',
+            'common/main/lib/controller/TabStyler',
+            'common/main/lib/controller/Desktop',
+            'common/main/lib/collection/Users',
+            'documenteditor/main/app/controller/Viewport',
+            'documenteditor/main/app/controller/DocumentHolder',
+            'documenteditor/main/app/controller/Toolbar',
+            'documenteditor/main/app/controller/Statusbar',
+            'documenteditor/main/app/controller/LeftMenu',
+            'documenteditor/main/app/controller/Main',
+            'documenteditor/main/app/controller/ViewTab',
+            'documenteditor/main/app/controller/Search',
+            'documenteditor/main/app/controller/Print',
+            'common/main/lib/util/utils',
+            'common/main/lib/controller/Fonts',
+            'common/main/lib/controller/Shortcuts'
+        ];
+        appControllers = previewLiteControllers;
+        requireModules = previewLiteModules;
+    }
+
+    /**
+     * Application instance with DE namespace defined
+     */
+    var app = new Backbone.Application({
+        nameSpace: 'DE',
+        autoCreate: false,
+        controllers : appControllers
     });
 
     Common.Locale.apply(
         function() {
-            require([
-                'common/main/lib/mods/dropdown',
-                'common/main/lib/mods/tooltip',
-                'common/main/lib/util/LocalStorage',
-                'common/main/lib/controller/Scaling',
-                'common/main/lib/controller/Themes',
-                'common/main/lib/controller/TabStyler',
-                'common/main/lib/controller/Desktop',
-                'documenteditor/main/app/controller/Viewport',
-                'documenteditor/main/app/controller/DocumentHolder',
-                'documenteditor/main/app/controller/Toolbar',
-                'documenteditor/main/app/controller/Statusbar',
-                'documenteditor/main/app/controller/FormsTab',
-                'documenteditor/main/app/controller/Links',
-                'documenteditor/main/app/controller/Navigation',
-                'documenteditor/main/app/controller/PageThumbnails',
-                'documenteditor/main/app/controller/RightMenu',
-                'documenteditor/main/app/controller/LeftMenu',
-                'documenteditor/main/app/controller/Main',
-                'documenteditor/main/app/controller/ViewTab',
-                'documenteditor/main/app/controller/HeaderFooterTab',
-                'documenteditor/main/app/controller/Search',
-                'documenteditor/main/app/controller/DocProtection',
-                'documenteditor/main/app/controller/Print',
-                'common/main/lib/util/utils',
-                'common/main/lib/controller/Fonts',
-                'common/main/lib/controller/ChartTab',
-                'common/main/lib/controller/History'
-                /** coauthoring begin **/
-                ,'common/main/lib/controller/Comments'
-                ,'common/main/lib/controller/Chat'
-                /** coauthoring end **/
-                ,'common/main/lib/controller/ExternalLinks'
-                ,'common/main/lib/controller/Plugins'
-                ,'common/main/lib/controller/ExternalDiagramEditor'
-                ,'common/main/lib/controller/ExternalMergeEditor'
-                ,'common/main/lib/controller/ExternalOleEditor'
-                ,'common/main/lib/controller/ReviewChanges'
-                ,'common/main/lib/controller/Protection'
-                ,'common/main/lib/controller/Shortcuts'
-                ,'common/main/lib/controller/Draw'
-                ,'common/main/lib/controller/PasteOptions'
-            ], function() {
-                const code_path = !window.isIEBrowser ?
-                        'documenteditor/main/code' : 'documenteditor/main/ie/code';
+            require(requireModules, function() {
+                var code_path = previewLite ?
+                        (!window.isIEBrowser ? 'documenteditor/main/app_pack_lite' : 'documenteditor/main/ie/app_pack_lite') :
+                        (!window.isIEBrowser ? 'documenteditor/main/code' : 'documenteditor/main/ie/code');
                 app.postLaunchScripts = [
-                    code_path,
+                    code_path
                 ];
                 app.start();
             });

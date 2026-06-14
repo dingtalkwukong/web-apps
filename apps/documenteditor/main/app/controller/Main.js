@@ -409,6 +409,7 @@ define([
                 this.editorConfig = $.extend(this.editorConfig, data.config);
 
                 this.appOptions.customization   = this.editorConfig.customization;
+                this.appOptions.previewLite     = !!this.editorConfig.previewLite || /(?:^|[?&])previewLite=1(?:&|$)/.test(window.location.search);
                 this.appOptions.canRenameAnonymous = !((typeof (this.appOptions.customization) == 'object') && (typeof (this.appOptions.customization.anonymous) == 'object') && (this.appOptions.customization.anonymous.request===false));
                 this.appOptions.guestName = (typeof (this.appOptions.customization) == 'object') && (typeof (this.appOptions.customization.anonymous) == 'object') &&
                                 (typeof (this.appOptions.customization.anonymous.label) == 'string') && this.appOptions.customization.anonymous.label.trim()!=='' ?
@@ -904,15 +905,17 @@ define([
                 !disable && this.stackDisableActions.pop({type: type});
                 var prev_options = !disable && (this.stackDisableActions.length()>0) ? this.stackDisableActions.get(this.stackDisableActions.length()-1) : null;
 
-                if (options.rightMenu && app.getController('RightMenu')) {
-                    options.rightMenu.clear && app.getController('RightMenu').getView('RightMenu').clearSelection();
-                    options.rightMenu.disable && app.getController('RightMenu').SetDisabled(disable, options.allowMerge, options.allowSignature);
+                var rightMenuController = app.getController('RightMenu');
+                if (options.rightMenu && rightMenuController) {
+                    options.rightMenu.clear && rightMenuController.getView('RightMenu').clearSelection();
+                    options.rightMenu.disable && rightMenuController.SetDisabled(disable, options.allowMerge, options.allowSignature);
                 }
                 if (options.statusBar) {
                     app.getController('Statusbar').getView('Statusbar').SetDisabled(disable);
                 }
                 if (options.review) {
-                    app.getController('Common.Controllers.ReviewChanges').SetDisabled(disable, options.reviewMode, options.fillFormMode);
+                    var reviewController = app.getController('Common.Controllers.ReviewChanges');
+                    reviewController && reviewController.SetDisabled(disable, options.reviewMode, options.fillFormMode);
                 }
                 if (options.viewport) {
                     app.getController('Viewport').SetDisabled(disable);
@@ -944,10 +947,12 @@ define([
                     app.getController('Navigation') && app.getController('Navigation').SetDisabled(disable);
                 }
                 if (options.plugins) {
-                    app.getController('Common.Controllers.Plugins').getView('Common.Views.Plugins').SetDisabled(disable, options.reviewMode, options.fillFormMode);
+                    var pluginsController = app.getController('Common.Controllers.Plugins');
+                    pluginsController && pluginsController.getView('Common.Views.Plugins').SetDisabled(disable, options.reviewMode, options.fillFormMode);
                 }
                 if (options.protect) {
-                    app.getController('Common.Controllers.Protection').SetDisabled(disable, false);
+                    var protectionController = app.getController('Common.Controllers.Protection');
+                    protectionController && protectionController.SetDisabled(disable, false);
                 }
 
                 if (options.shortcuts) {
@@ -1043,7 +1048,8 @@ define([
                 var application = this.getApplication(),
                     toolbarController = application.getController('Toolbar'),
                     toolbarView = toolbarController.getView(),
-                    rightMenu = application.getController('RightMenu').getView('RightMenu');
+                    rightMenuController = application.getController('RightMenu'),
+                    rightMenu = rightMenuController ? rightMenuController.getView('RightMenu') : null;
 
                 if (this.appOptions.isEdit && toolbarView && (toolbarView.btnInsertShape.pressed || toolbarView.btnInsertText.pressed) &&
                     ( !_.isObject(arguments[1]) || arguments[1].id !== 'tlbtn-insertshape')) { // TODO: Event from api is needed to clear btnInsertShape state
@@ -1113,12 +1119,13 @@ define([
                 action = this.stackLongActions.get({type: Asc.c_oAscAsyncActionType.BlockInteraction});
                 action ? this.setLongActionView(action) : this.loadMask && this.loadMask.hide();
 
+                var reviewController = this.getApplication().getController('Common.Controllers.ReviewChanges');
                 if (this.appOptions.isEdit && (id==Asc.c_oAscAsyncAction['Save'] || id==Asc.c_oAscAsyncAction['ForceSaveButton']) && (!this._state.fastCoauth || this._state.usersCount<2 ||
-                    this.getApplication().getController('Common.Controllers.ReviewChanges').isPreviewChangesMode()))
+                    reviewController && reviewController.isPreviewChangesMode()))
                     this.synchronizeChanges();
                 else if (this.appOptions.isEdit && (id==Asc.c_oAscAsyncAction['Save'] || id==Asc.c_oAscAsyncAction['ForceSaveButton'] || id == Asc.c_oAscAsyncAction['ApplyChanges']) &&
-                        this._state.fastCoauth)
-                    this.getApplication().getController('Common.Controllers.ReviewChanges').synchronizeChanges();
+                        this._state.fastCoauth && reviewController)
+                    reviewController.synchronizeChanges();
 
                 if ( id == Asc.c_oAscAsyncAction['Open']) {
                     Common.Utils.InternalSettings.get("de-settings-livecomment") ? this.api.asc_showComments(Common.Utils.InternalSettings.get("de-settings-resolvedcomment")) : this.api.asc_hideComments();
@@ -1453,14 +1460,17 @@ define([
                 leftmenuController.getView('LeftMenu').getMenu('file').loadDocument({doc:me.document});
                 leftmenuController.createDelayedElements().setApi(me.api);
 
-                navigationController.setMode(me.appOptions).setApi(me.api);
+                navigationController && navigationController.setMode(me.appOptions).setApi(me.api);
 
-                chatController.setApi(this.api).setMode(this.appOptions);
-                application.getController('Common.Controllers.ExternalDiagramEditor').setApi(this.api).loadConfig({config:this.editorConfig, customization: this.editorConfig.customization});
-                application.getController('Common.Controllers.ExternalMergeEditor').setApi(this.api).loadConfig({config:this.editorConfig, customization: this.editorConfig.customization});
-                application.getController('Common.Controllers.ExternalOleEditor').setApi(this.api).loadConfig({config:this.editorConfig, customization: this.editorConfig.customization});
+                chatController && chatController.setApi(this.api).setMode(this.appOptions);
+                var diagramEditorController = application.getController('Common.Controllers.ExternalDiagramEditor'),
+                    mergeEditorController = application.getController('Common.Controllers.ExternalMergeEditor'),
+                    oleEditorController = application.getController('Common.Controllers.ExternalOleEditor');
+                diagramEditorController && diagramEditorController.setApi(this.api).loadConfig({config:this.editorConfig, customization: this.editorConfig.customization});
+                mergeEditorController && mergeEditorController.setApi(this.api).loadConfig({config:this.editorConfig, customization: this.editorConfig.customization});
+                oleEditorController && oleEditorController.setApi(this.api).loadConfig({config:this.editorConfig, customization: this.editorConfig.customization});
 
-                pluginsController.setApi(me.api);
+                pluginsController && pluginsController.setApi(me.api);
 
                 documentHolderController.setApi(me.api);
                 // documentHolderController.createDelayedElements();
@@ -1794,6 +1804,26 @@ define([
                     this.appOptions.canChat = false;
                 }
 
+                if ( this.appOptions.previewLite ) {
+                    this.appOptions.isLightVersion = true;
+                    this.appOptions.canUseHistory =
+                    this.appOptions.canHistoryClose =
+                    this.appOptions.canHistoryRestore =
+                    this.appOptions.canReview =
+                    this.appOptions.isReviewOnly =
+                    this.appOptions.canComments =
+                    this.appOptions.canViewComments =
+                    this.appOptions.canChat =
+                    this.appOptions.canUseMailMerge =
+                    this.appOptions.canFillForms =
+                    this.appOptions.isRestrictedEdit =
+                    this.appOptions.canSaveToFile =
+                    this.appOptions.showSaveButton =
+                    this.appOptions.canUseThumbnails =
+                    this.appOptions.canUseViwerNavigation = false;
+                    this.appOptions.canRequestEditRights = false;
+                }
+
                 // var type = /^(?:(djvu))$/.exec(this.document.fileType);
                 this.appOptions.canUseSelectHandTools = this.appOptions.canUseThumbnails = this.appOptions.canUseViwerNavigation = isPDFViewer;
                 this.appOptions.canDownloadForms = false && this.appOptions.canLicense && this.appOptions.canDownload && this.appOptions.isRestrictedEdit && this.appOptions.canFillForms; // don't show download form button in edit mode
@@ -1827,7 +1857,8 @@ define([
                 appHeader.setUserAvatar(this.appOptions.user.image);
 
                 this.appOptions.canRename && appHeader.setCanRename(true);
-                this.getApplication().getController('Common.Controllers.Plugins').setMode(this.appOptions, this.api);
+                var pluginsModeController = this.getApplication().getController('Common.Controllers.Plugins');
+                pluginsModeController && pluginsModeController.setMode(this.appOptions, this.api);
                 Common.UI.ExternalUsers.init(this.appOptions.canRequestUsers, this.api);
                 this.appOptions.user.image ? Common.UI.ExternalUsers.setImage(this.appOptions.user.id, this.appOptions.user.image) : Common.UI.ExternalUsers.get('info', this.appOptions.user.id);
 
@@ -2065,14 +2096,16 @@ define([
 
             applyModeEditorElements: function() {
                 /** coauthoring begin **/
-                this.contComments.setMode(this.appOptions);
-                this.contComments.setConfig({config: this.editorConfig}, this.api);
+                if (this.contComments) {
+                    this.contComments.setMode(this.appOptions);
+                    this.contComments.setConfig({config: this.editorConfig}, this.api);
+                }
                 /** coauthoring end **/
 
                 var me = this,
                     application         = this.getApplication(),
                     reviewController    = application.getController('Common.Controllers.ReviewChanges');
-                reviewController.setMode(me.appOptions).setConfig({config: me.editorConfig}, me.api).loadDocument({doc:me.document});
+                reviewController && reviewController.setMode(me.appOptions).setConfig({config: me.editorConfig}, me.api).loadDocument({doc:me.document});
 
                 var toolbarController   = application.getController('Toolbar');
                 toolbarController   && toolbarController.setApi(me.api);
@@ -2581,7 +2614,7 @@ define([
                 this.disableSaveButton(isModified);
 
                 /** coauthoring begin **/
-                if (this.contComments.isDummyComment && !this.dontCloseDummyComment && !this.beforeShowDummyComment) {
+                if (this.contComments && this.contComments.isDummyComment && !this.dontCloseDummyComment && !this.beforeShowDummyComment) {
                     this.contComments.clearDummyComment();
                 }
                 /** coauthoring end **/
@@ -2747,7 +2780,8 @@ define([
 
             synchronizeChanges: function() {
                 this.getApplication().getController('Statusbar').synchronizeChanges();
-                this.getApplication().getController('Common.Controllers.ReviewChanges').synchronizeChanges();
+                var reviewController = this.getApplication().getController('Common.Controllers.ReviewChanges');
+                reviewController && reviewController.synchronizeChanges();
                 this.getApplication().getController('DocumentHolder').hideTips();
                 /** coauthoring begin **/
                 this.getApplication().getController('Toolbar').getView().synchronizeChanges();
@@ -2840,7 +2874,8 @@ define([
             updateThemeColors: function() {
                 var me = this;
                 setTimeout(function(){
-                    me.getApplication().getController('RightMenu').UpdateThemeColors();
+                    var rightMenuController = me.getApplication().getController('RightMenu');
+                    rightMenuController && rightMenuController.UpdateThemeColors();
                 }, 50);
                 setTimeout(function(){
                     me.getApplication().getController('Toolbar').updateThemeColors();
@@ -2932,16 +2967,19 @@ define([
                 if (this.languages && this.languages.length>0) {
                     this.getApplication().getController('DocumentHolder').getView().setLanguages(this.languages);
                     this.getApplication().getController('Statusbar').setLanguages(this.languages);
-                    this.getApplication().getController('Common.Controllers.ReviewChanges').setLanguages(this.languages);
+                    var reviewController = this.getApplication().getController('Common.Controllers.ReviewChanges');
+                    reviewController && reviewController.setLanguages(this.languages);
                 }
             },
 
             onInsertTable:  function() {
-                this.getApplication().getController('RightMenu').onInsertTable();
+                var rightMenuController = this.getApplication().getController('RightMenu');
+                rightMenuController && rightMenuController.onInsertTable();
             },
 
             onInsertImage:  function() {
-                this.getApplication().getController('RightMenu').onInsertImage();
+                var rightMenuController = this.getApplication().getController('RightMenu');
+                rightMenuController && rightMenuController.onInsertImage();
             },
 
             // onInsertChart:  function() {
@@ -2949,15 +2987,18 @@ define([
             // },
 
             onInsertShape:  function() {
-                this.getApplication().getController('RightMenu').onInsertShape();
+                var rightMenuController = this.getApplication().getController('RightMenu');
+                rightMenuController && rightMenuController.onInsertShape();
             },
 
             onInsertTextArt:  function() {
-                this.getApplication().getController('RightMenu').onInsertTextArt();
+                var rightMenuController = this.getApplication().getController('RightMenu');
+                rightMenuController && rightMenuController.onInsertTextArt();
             },
 
             onInsertControl:  function() {
-                this.getApplication().getController('RightMenu').onInsertControl();
+                var rightMenuController = this.getApplication().getController('RightMenu');
+                rightMenuController && rightMenuController.onInsertControl();
             },
 
             unitsChanged: function(m) {
@@ -2966,7 +3007,8 @@ define([
                 Common.Utils.Metric.setCurrentMetric(value);
                 Common.Utils.InternalSettings.set("de-settings-unit", value);
                 this.api.asc_SetDocumentUnits((value==Common.Utils.Metric.c_MetricUnits.inch) ? Asc.c_oAscDocumentUnits.Inch : ((value==Common.Utils.Metric.c_MetricUnits.pt) ? Asc.c_oAscDocumentUnits.Point : Asc.c_oAscDocumentUnits.Millimeter));
-                this.getApplication().getController('RightMenu').updateMetricUnit();
+                var rightMenuController = this.getApplication().getController('RightMenu');
+                rightMenuController && rightMenuController.updateMetricUnit();
                 this.getApplication().getController('Toolbar').getView().updateMetricUnit();
                 this.appOptions.canPreviewPrint && this.getApplication().getController('Print').getView('PrintWithPreview').updateMetricUnit();
             },
@@ -3054,7 +3096,8 @@ define([
                                 this._state.fastCoauth = false;
                                 Common.localStorage.setItem("de-settings-showchanges-strict", 'last');
                                 this.api.SetCollaborativeMarksShowType(Asc.c_oAscCollaborativeMarksShowType.LastChanges);
-                                this.getApplication().getController('Common.Controllers.ReviewChanges').applySettings();
+                                var reviewController = this.getApplication().getController('Common.Controllers.ReviewChanges');
+                                reviewController && reviewController.applySettings();
                             }
                             this.onEditComplete();
                         }, this)
@@ -3116,7 +3159,8 @@ define([
                 var filemenu = this.getApplication().getController('LeftMenu').getView('LeftMenu').getMenu('file');
                 filemenu.loadDocument({doc:this.document});
                 filemenu.panels && filemenu.panels['info'] && filemenu.panels['info'].updateInfo(this.document);
-                this.getApplication().getController('Common.Controllers.ReviewChanges').loadDocument({doc:this.document});
+                var reviewController = this.getApplication().getController('Common.Controllers.ReviewChanges');
+                reviewController && reviewController.loadDocument({doc:this.document});
                 Common.Gateway.metaChange(meta);
 
                 if (this.appOptions.wopi) {

@@ -216,6 +216,7 @@ define([
                     // Initialize api gateway
                     this.editorConfig = {};
                     this.appOptions = {};
+                    this._pendingOpenBinary = null;
                     Common.Gateway.on('init',           _.bind(this.loadConfig, this));
                     Common.Gateway.on('showmessage',    _.bind(this.onExternalMessage, this));
                     Common.Gateway.on('opendocument',   _.bind(this.loadDocument, this));
@@ -1460,7 +1461,11 @@ define([
                 this.api.asc_setRestriction(this.appOptions.isRestrictedEdit ? Asc.c_oAscRestrictionType.OnlyForms :
                                             this.appOptions.isPDFEdit ? Asc.c_oAscRestrictionType.None : Asc.c_oAscRestrictionType.View);
 
-                this.api.asc_LoadDocument();
+                if (this._pendingOpenBinary) {
+                    this._openPendingBinary();
+                } else {
+                    this.api.asc_LoadDocument();
+                }
             },
 
             loadCoAuthSettings: function() {
@@ -2996,7 +3001,26 @@ define([
             },
 
             loadBinary: function(data) {
-                data && this.api.asc_openDocumentFromBytes(new Uint8Array(data));
+                var buffer = data && data.buffer ? data.buffer : data,
+                    doc = data && data.doc;
+
+                if (!buffer)
+                    return;
+
+                if (doc && !this.document) {
+                    this._pendingOpenBinary = buffer;
+                    this.loadDocument(doc);
+                    return;
+                }
+
+                this._pendingOpenBinary = null;
+                this.api.asc_openDocumentFromBytes(new Uint8Array(buffer));
+            },
+
+            _openPendingBinary: function() {
+                var buffer = this._pendingOpenBinary;
+                this._pendingOpenBinary = null;
+                buffer && this.api.asc_openDocumentFromBytes(new Uint8Array(buffer));
             },
 
             errorLang: 'The interface language is not loaded.<br>Please contact your Document Server administrator.'

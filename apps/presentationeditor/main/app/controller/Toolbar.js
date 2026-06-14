@@ -1658,7 +1658,8 @@ define([
 
         onLineSpaceClick: function(menu, item) {
             if (item.value==='options') {
-                this.getApplication().getController('RightMenu').onRightMenuOpen(Common.Utils.documentSettingsType.Paragraph);
+                var rightMenuController = this.getApplication().getController('RightMenu');
+                rightMenuController && rightMenuController.onRightMenuOpen(Common.Utils.documentSettingsType.Paragraph);
                 Common.NotificationCenter.trigger('edit:complete', this.toolbar);
             }
         },
@@ -1919,7 +1920,8 @@ define([
                     }
                 })).show();
             } else if (item.value == 'sse') {
-                var oleEditor = this.getApplication().getController('Common.Controllers.ExternalOleEditor').getView('Common.Views.ExternalOleEditor');
+                var oleEditorController = this.getApplication().getController('Common.Controllers.ExternalOleEditor'),
+                    oleEditor = oleEditorController ? oleEditorController.getView('Common.Views.ExternalOleEditor') : null;
                 if (oleEditor) {
                     oleEditor.setEditMode(false);
                     oleEditor.show();
@@ -2812,7 +2814,8 @@ define([
             me.toolbar.render(_.extend({compactview: editmode ? compactview : true}, config));
 
             var tab = {action: 'review', caption: me.toolbar.textTabCollaboration, layoutname: 'toolbar-collaboration', dataHintTitle: 'U'};
-            var $panel = me.getApplication().getController('Common.Controllers.ReviewChanges').createToolbarPanel();
+            var reviewController = me.getApplication().getController('Common.Controllers.ReviewChanges'),
+                $panel = reviewController ? reviewController.createToolbarPanel() : null;
             if ( $panel ) {
                 me.toolbar.addTab(tab, $panel, 5);
                 me.toolbar.setVisible('review', (config.isEdit || config.canViewReview || config.canCoAuthoring && config.canComments) && Common.UI.LayoutManager.isElementVisible('toolbar-collaboration'));
@@ -2822,15 +2825,17 @@ define([
                 me.toolbar.setMode(config);
 
                 var drawtab = me.getApplication().getController('Common.Controllers.Draw');
-                drawtab.setApi(me.api).setMode(config);
-                $panel = drawtab.createToolbarPanel();
-                if ($panel) {
-                    tab = {action: 'draw', caption: me.toolbar.textTabDraw, extcls: 'canedit', layoutname: 'toolbar-draw', dataHintTitle: 'C'};
-                    me.toolbar.addTab(tab, $panel, 2);
-                    me.toolbar.setVisible('draw', Common.UI.LayoutManager.isElementVisible('toolbar-draw'));
-                    me.btnsDrawTab = drawtab.getView().getButtons();
-                    Array.prototype.push.apply(me.toolbar.lockControls, me.btnsDrawTab);
-                    Array.prototype.push.apply(me.toolbar.slideOnlyControls, me.btnsDrawTab);
+                if (drawtab) {
+                    drawtab.setApi(me.api).setMode(config);
+                    $panel = drawtab.createToolbarPanel();
+                    if ($panel) {
+                        tab = {action: 'draw', caption: me.toolbar.textTabDraw, extcls: 'canedit', layoutname: 'toolbar-draw', dataHintTitle: 'C'};
+                        me.toolbar.addTab(tab, $panel, 2);
+                        me.toolbar.setVisible('draw', Common.UI.LayoutManager.isElementVisible('toolbar-draw'));
+                        me.btnsDrawTab = drawtab.getView().getButtons();
+                        Array.prototype.push.apply(me.toolbar.lockControls, me.btnsDrawTab);
+                        Array.prototype.push.apply(me.toolbar.slideOnlyControls, me.btnsDrawTab);
+                    }
                 }
 
                 tab = {caption: me.toolbar.textTabChart, action: 'charttab', extcls: config.isEdit ? 'canedit' : '', layoutname: 'toolbar-charttab', dataHintTitle: 'B', aux: true};
@@ -2896,7 +2901,8 @@ define([
 
                 me.getApplication().getController('Common.Controllers.ExternalLinks').setConfig({toolbar: me}).setApi(me.api);
             } else {
-                me.getApplication().getController('Common.Controllers.Draw').setApi(me.api).setMode(config);
+                var drawController = me.getApplication().getController('Common.Controllers.Draw');
+                drawController && drawController.setApi(me.api).setMode(config);
             }
 
             tab = {caption: me.toolbar.textTabView, action: 'view', extcls: config.isEdit ? 'canedit' : '', layoutname: 'toolbar-view', dataHintTitle: 'W'};
@@ -2921,20 +2927,23 @@ define([
                 this.btnsComment = Common.Utils.injectButtons(this.toolbar.$el.find('.slot-comment'), 'tlbtn-addcomment-', 'toolbar__icon btn-big-add-comment', me.toolbar.capBtnComment, [_set.lostConnect, _set.noSlides, _set.slideMasterMode], undefined, undefined, undefined, '1', 'bottom', 'small');
 
                 if ( this.btnsComment.length ) {
-                    var _comments = PE.getController('Common.Controllers.Comments').getView();
+                    var commentsController = PE.getController('Common.Controllers.Comments'),
+                        _comments = commentsController ? commentsController.getView() : null;
                     Array.prototype.push.apply(me.toolbar.lockControls, this.btnsComment);
                     Common.UI.LayoutManager.addControls(this.btnsComment);
-                    this.btnsComment.forEach(function (btn) {
-                        btn.updateHint( _comments.textHintAddComment );
-                        btn.on('click', function (btn, e) {
-                            Common.NotificationCenter.trigger('app:comment:add', 'toolbar');
-                        });
-                        if (btn.cmpEl.closest('#review-changes-panel').length>0)
-                            btn.setCaption(me.toolbar.capBtnAddComment);
-                    }, this);
-                    if (_comments.buttonAddNew) {
-                        _comments.buttonAddNew.options.lock = [ _set.lostConnect, _set.noSlides ];
-                        this.btnsComment.add(_comments.buttonAddNew);
+                    if (_comments) {
+                        this.btnsComment.forEach(function (btn) {
+                            btn.updateHint( _comments.textHintAddComment );
+                            btn.on('click', function (btn, e) {
+                                Common.NotificationCenter.trigger('app:comment:add', 'toolbar');
+                            });
+                            if (btn.cmpEl.closest('#review-changes-panel').length>0)
+                                btn.setCaption(me.toolbar.capBtnAddComment);
+                        }, this);
+                        if (_comments.buttonAddNew) {
+                            _comments.buttonAddNew.options.lock = [ _set.lostConnect, _set.noSlides ];
+                            this.btnsComment.add(_comments.buttonAddNew);
+                        }
                     }
                     this.toolbar.lockToolbar(Common.enumLock.noSlides, this._state.no_slides, { array: this.btnsComment });
                 }

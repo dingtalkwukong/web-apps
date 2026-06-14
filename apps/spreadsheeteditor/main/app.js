@@ -126,14 +126,8 @@ require([
         return;
     Backbone.history.start();
     window._ = _;
-
-    /**
-     * Application instance with SSE namespace defined
-     */
-    var app = new Backbone.Application({
-        nameSpace: 'SSE',
-        autoCreate: false,
-        controllers : [
+    var previewLite = /(?:^|[?&])previewLite=1(?:&|$)/.test(window.location.search),
+        appControllers = [
             'Viewport',
             'DocumentHolder',
             'CellEditor',
@@ -165,11 +159,8 @@ require([
             ,'Common.Controllers.Protection'
             ,'Common.Controllers.Shortcuts'
             ,'Common.Controllers.PasteOptions'
-        ]
-    });
-
-    Common.Locale.apply(function(){
-        require([
+        ],
+        requireModules = [
             'common/main/lib/mods/dropdown',
             'common/main/lib/mods/tooltip',
             'common/main/lib/util/LocalStorage',
@@ -215,10 +206,64 @@ require([
             ,'common/main/lib/controller/Shortcuts'
             ,'common/main/lib/controller/Draw'
             ,'common/main/lib/controller/PasteOptions'
-        ], function() {
-            const code_path = !window.isIEBrowser ? 'spreadsheeteditor/main/code' : 'spreadsheeteditor/main/ie/code';            
+        ];
+
+    if (previewLite) {
+        var previewLiteControllers = [
+            'Viewport',
+            'DocumentHolder',
+            'Toolbar',
+            'Statusbar',
+            'LeftMenu',
+            'Main',
+            'ViewTab',
+            'Search',
+            'Print',
+            'Common.Controllers.Fonts',
+            'Common.Controllers.Shortcuts'
+        ];
+        var previewLiteModules = [
+            'common/main/lib/mods/dropdown',
+            'common/main/lib/mods/tooltip',
+            'common/main/lib/util/LocalStorage',
+            'common/main/lib/controller/Scaling',
+            'common/main/lib/controller/Themes',
+            'common/main/lib/controller/TabStyler',
+            'common/main/lib/controller/Desktop',
+            'common/main/lib/collection/Users',
+            'spreadsheeteditor/main/app/controller/Viewport',
+            'spreadsheeteditor/main/app/controller/DocumentHolder',
+            'spreadsheeteditor/main/app/controller/Toolbar',
+            'spreadsheeteditor/main/app/controller/Statusbar',
+            'spreadsheeteditor/main/app/controller/LeftMenu',
+            'spreadsheeteditor/main/app/controller/Main',
+            'spreadsheeteditor/main/app/controller/ViewTab',
+            'spreadsheeteditor/main/app/controller/Search',
+            'spreadsheeteditor/main/app/controller/Print',
+            'common/main/lib/util/utils',
+            'common/main/lib/controller/Fonts',
+            'common/main/lib/controller/Shortcuts'
+        ];
+        appControllers = previewLiteControllers;
+        requireModules = previewLiteModules;
+    }
+
+    /**
+     * Application instance with SSE namespace defined
+     */
+    var app = new Backbone.Application({
+        nameSpace: 'SSE',
+        autoCreate: false,
+        controllers : appControllers
+    });
+
+    Common.Locale.apply(function(){
+        require(requireModules, function() {
+            var code_path = previewLite ?
+                    (!window.isIEBrowser ? 'spreadsheeteditor/main/app_pack_lite' : 'spreadsheeteditor/main/ie/app_pack_lite') :
+                    (!window.isIEBrowser ? 'spreadsheeteditor/main/code' : 'spreadsheeteditor/main/ie/code');
             app.postLaunchScripts = [
-                code_path,
+                code_path
             ];
 
             app.start();

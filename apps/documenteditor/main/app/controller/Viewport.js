@@ -46,6 +46,7 @@ define([
     'core',
     'common/main/lib/view/Header',
     'common/main/lib/view/SearchBar',
+    'common/main/lib/collection/Users',
     'documenteditor/main/app/view/Viewport',
     'documenteditor/main/app/view/LeftMenu'
 ], function (Viewport) {
@@ -56,7 +57,9 @@ define([
         models: [],
 
         // Specifying a collection of out Viewport
-        collections: [],
+        collections: [
+            'Common.Collections.Users'
+        ],
 
         // Specifying application views
         views: [

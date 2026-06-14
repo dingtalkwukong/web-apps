@@ -1822,7 +1822,8 @@ define([
 
         onLineSpaceClick: function(menu, item) {
             if (item.value==='options') {
-                this.getApplication().getController('RightMenu').onRightMenuOpen(Common.Utils.documentSettingsType.Paragraph);
+                var rightMenuController = this.getApplication().getController('RightMenu');
+                rightMenuController && rightMenuController.onRightMenuOpen(Common.Utils.documentSettingsType.Paragraph);
                 Common.NotificationCenter.trigger('edit:complete', this.toolbar);
             } else if (item.value==='before') {
                 item.options.action === 'add' ? this.api.asc_addSpaceBeforeParagraph() : this.api.asc_removeSpaceBeforeParagraph();
@@ -1977,7 +1978,8 @@ define([
                     }
                 })).show();
             } else if (item.value == 'sse') {
-                var oleEditor = this.getApplication().getController('Common.Controllers.ExternalOleEditor').getView('Common.Views.ExternalOleEditor');
+                var oleEditorController = this.getApplication().getController('Common.Controllers.ExternalOleEditor'),
+                    oleEditor = oleEditorController ? oleEditorController.getView('Common.Views.ExternalOleEditor') : null;
                 if (oleEditor) {
                     oleEditor.setEditMode(false);
                     oleEditor.show();
@@ -3889,8 +3891,10 @@ define([
         insertSpreadsheetFromStorage: function(data) {
             if (data && (data.c==='mailmerge')) {
                 this.api.asc_StartMailMerge(data);
-                if (!this.mergeEditor)
-                    this.mergeEditor = this.getApplication().getController('Common.Controllers.ExternalMergeEditor').getView('Common.Views.ExternalMergeEditor');
+                if (!this.mergeEditor) {
+                    var mergeEditorController = this.getApplication().getController('Common.Controllers.ExternalMergeEditor');
+                    this.mergeEditor = mergeEditorController ? mergeEditorController.getView('Common.Views.ExternalMergeEditor') : null;
+                }
                 if (this.mergeEditor)
                     this.mergeEditor.setEditMode(false);
             }
@@ -3929,8 +3933,9 @@ define([
             me.toolbar.render(_.extend({isCompactView: editmode ? compactview : true}, config));
 
             var tab = {action: 'review', caption: me.toolbar.textTabCollaboration, dataHintTitle: 'U', layoutname: 'toolbar-collaboration'};
-            var $panel = me.application.getController('Common.Controllers.ReviewChanges').createToolbarPanel();
-            if ( $panel ) {
+            var reviewController = me.application.getController('Common.Controllers.ReviewChanges'),
+                $panel = reviewController ? reviewController.createToolbarPanel() : null;
+            if ($panel) {
                 me.toolbar.addTab(tab, $panel, 6);
                 me.toolbar.setVisible('review', (config.isEdit || config.canCoAuthoring && config.canComments) && Common.UI.LayoutManager.isElementVisible('toolbar-collaboration') ); // use config.canViewReview in review controller. set visible review tab in view mode only when asc_HaveRevisionsChanges
             }
@@ -3963,14 +3968,16 @@ define([
                 //     }
                 // }
                 var drawtab = application.getController('Common.Controllers.Draw');
-                drawtab.setApi(me.api).setMode(config);
-                $panel = drawtab.createToolbarPanel();
-                if ($panel) {
-                    tab = {action: 'draw', caption: me.toolbar.textTabDraw, extcls: 'canedit', layoutname: 'toolbar-draw', dataHintTitle: 'C'};
-                    me.toolbar.addTab(tab, $panel, 2);
-                    me.toolbar.setVisible('draw', Common.UI.LayoutManager.isElementVisible('toolbar-draw'));
-                    Array.prototype.push.apply(me.toolbar.lockControls, drawtab.getView().getButtons());
-                    Array.prototype.push.apply(me.toolbar.paragraphControls, drawtab.getView().getButtons());
+                if (drawtab) {
+                    drawtab.setApi(me.api).setMode(config);
+                    $panel = drawtab.createToolbarPanel();
+                    if ($panel) {
+                        tab = {action: 'draw', caption: me.toolbar.textTabDraw, extcls: 'canedit', layoutname: 'toolbar-draw', dataHintTitle: 'C'};
+                        me.toolbar.addTab(tab, $panel, 2);
+                        me.toolbar.setVisible('draw', Common.UI.LayoutManager.isElementVisible('toolbar-draw'));
+                        Array.prototype.push.apply(me.toolbar.lockControls, drawtab.getView().getButtons());
+                        Array.prototype.push.apply(me.toolbar.paragraphControls, drawtab.getView().getButtons());
+                    }
                 }
 
                 tab = {caption: this.toolbar.textTabHeaderFooter, action: 'headerfooter', extcls: config.isEdit ? 'canedit' : '', layoutname: 'toolbar-headerfooter', dataHintTitle: 'D'};
@@ -4088,20 +4095,23 @@ define([
                                     Common.enumLock.previewReviewMode, Common.enumLock.viewFormMode, Common.enumLock.docLockView, Common.enumLock.docLockForms, Common.enumLock.viewMode ],
                                  undefined, undefined, undefined, '1', 'bottom');
                 if ( this.btnsComment.length ) {
-                    var _comments = DE.getController('Common.Controllers.Comments').getView();
-                    this.btnsComment.forEach(function (btn) {
-                        btn.updateHint( _comments.textHintAddComment );
-                        btn.on('click', function (btn, e) {
-                            Common.NotificationCenter.trigger('app:comment:add', 'toolbar');
-                        });
-                        if (btn.cmpEl.closest('#review-changes-panel').length>0)
-                            btn.setCaption(me.toolbar.capBtnAddComment);
-                    }, this);
-                    if (_comments.buttonAddNew) {
-                        _comments.buttonAddNew.options.lock = [ Common.enumLock.paragraphLock, Common.enumLock.headerLock, Common.enumLock.richEditLock, Common.enumLock.plainEditLock, Common.enumLock.richDelLock, Common.enumLock.plainDelLock,
-                                                                Common.enumLock.cantAddQuotedComment, Common.enumLock.imageLock, Common.enumLock.inSpecificForm, Common.enumLock.inImage, Common.enumLock.lostConnect, Common.enumLock.disableOnStart,
-                                                                Common.enumLock.previewReviewMode, Common.enumLock.viewFormMode, Common.enumLock.docLockView, Common.enumLock.docLockForms, Common.enumLock.viewMode ];
-                        this.btnsComment.add(_comments.buttonAddNew);
+                    var commentsController = DE.getController('Common.Controllers.Comments'),
+                        _comments = commentsController ? commentsController.getView() : null;
+                    if (_comments) {
+                        this.btnsComment.forEach(function (btn) {
+                            btn.updateHint( _comments.textHintAddComment );
+                            btn.on('click', function (btn, e) {
+                                Common.NotificationCenter.trigger('app:comment:add', 'toolbar');
+                            });
+                            if (btn.cmpEl.closest('#review-changes-panel').length>0)
+                                btn.setCaption(me.toolbar.capBtnAddComment);
+                        }, this);
+                        if (_comments.buttonAddNew) {
+                            _comments.buttonAddNew.options.lock = [ Common.enumLock.paragraphLock, Common.enumLock.headerLock, Common.enumLock.richEditLock, Common.enumLock.plainEditLock, Common.enumLock.richDelLock, Common.enumLock.plainDelLock,
+                                                                    Common.enumLock.cantAddQuotedComment, Common.enumLock.imageLock, Common.enumLock.inSpecificForm, Common.enumLock.inImage, Common.enumLock.lostConnect, Common.enumLock.disableOnStart,
+                                                                    Common.enumLock.previewReviewMode, Common.enumLock.viewFormMode, Common.enumLock.docLockView, Common.enumLock.docLockForms, Common.enumLock.viewMode ];
+                            this.btnsComment.add(_comments.buttonAddNew);
+                        }
                     }
                 }
 

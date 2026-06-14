@@ -463,7 +463,20 @@
             }
 
             if (_config.document) {
-                _openDocument(_config.document);
+                if (shouldOpenPdfAsBinary(_config)) {
+                    _openPdfDocumentAsBinary(_config.document);
+                } else {
+                    _openDocument(_config.document);
+                }
+            }
+        };
+
+        var _fireEvent = function(eventName, data) {
+            var events = _config.events || {},
+                handler = events[eventName];
+
+            if (handler && typeof handler == "function") {
+                handler.call(_self, {target: _self, data: data});
             }
         };
 
@@ -591,16 +604,25 @@
         })();
 
         var target = document.getElementById(placeholderId),
-            iframe;
+            iframe,
+            useNativePdfPreview;
 
         getShardkey(_config);
 
         if (target && _checkConfigParams()) {
-            iframe = createIframe(_config);
+            if (shouldUseOfficePreviewLite(_config)) {
+                _config.editorConfig.previewLite = true;
+            }
+
+            useNativePdfPreview = shouldUseNativePdfPreview(_config);
+            iframe = useNativePdfPreview ? createNativePdfPreviewIframe(_config, function() {
+                _fireEvent('onAppReady');
+                _fireEvent('onDocumentReady');
+            }) : createIframe(_config);
             if (_config.editorConfig.customization && _config.editorConfig.customization.integrationMode==='embed')
                 window.AscEmbed && window.AscEmbed.initWorker(iframe);
 
-            if (_config.document && (_config.document.isForm!==true && _config.document.isForm!==false)) {
+            if (!useNativePdfPreview && _config.document && (_config.document.isForm!==true && _config.document.isForm!==false)) {
                 iframe.onload = function() {
                     _sendCommand({
                         command: 'checkParams',
@@ -619,7 +641,8 @@
                 this.frameOrigin = pathArray[0] + '//' + pathArray[2];
             }
             target.parentNode && target.parentNode.replaceChild(iframe, target);
-            var _msgDispatcher = new MessageDispatcher(_onMessage, this);
+            if (!useNativePdfPreview)
+                var _msgDispatcher = new MessageDispatcher(_onMessage, this);
         }
 
         /*
@@ -673,6 +696,32 @@
                 command: 'openDocumentFromBinary',
                 data: doc.buffer
             }, doc.buffer);
+        };
+
+        var _openPdfDocumentAsBinary = function(doc) {
+            if (!doc || !doc.url || !window.fetch) {
+                _openDocument(doc);
+                return;
+            }
+
+            window.fetch(doc.url, {credentials: 'include'}).then(function(response) {
+                if (!response.ok)
+                    throw new Error("Cannot load PDF binary");
+                return response.arrayBuffer();
+            }).then(function(buffer) {
+                _sendCommand({
+                    command: 'openDocumentFromBinary',
+                    data: {
+                        doc: doc,
+                        buffer: buffer
+                    }
+                }, buffer);
+            }).catch(function(error) {
+                _fireEvent('onError', {
+                    errorCode: undefined,
+                    errorDescription: error && error.message ? error.message : "Cannot load PDF binary"
+                });
+            });
         };
 
         var _showMessage = function(title, msg) {
@@ -971,17 +1020,21 @@
         return '{{PRODUCT_VERSION}}';
     };
 
-    DocsAPI.DocEditor.warmUp = function(id) {
+    DocsAPI.DocEditor.warmUp = function(id, options) {
         var target = document.getElementById(id);
         if ( target ) {
             var path = extendAppPath({}, getBasePath());
-            path += 'api/documents/preload.html';
+            path += options && options.previewLite ? 'api/documents/preload-lite.html' : 'api/documents/preload.html';
 
             var iframe = document.createElement("iframe");
             iframe.width = 0;
             iframe.height = 0;
             iframe.style = 'border:0 none;';
             iframe.src = path;
+            if (options && options.previewLite) {
+                iframe.setAttribute("data-office-preview-lite", "true");
+                iframe.setAttribute("data-onlyoffice-preview-lite", "true");
+            }
 
             target.parentNode && target.parentNode.replaceChild(iframe, target);
         }
@@ -1230,7 +1283,9 @@
         if (!(isPdf || oldForm) && (config.editorConfig && config.editorConfig.mode == 'view' ||
             config.document && config.document.permissions && (config.document.permissions.edit === false && !config.document.permissions.review )))
             params += "&mode=view";
-        if ((isPdf || oldForm) && (config.document && config.document.permissions && config.document.permissions.edit === false || config.editorConfig && config.editorConfig.mode == 'view'))
+        if (isPdf && config.document && config.document.isForm === false && isViewOnlyMode(config) && !hasEditOrReviewMode(config))
+            params += "&mode=view";
+        else if ((isPdf || oldForm) && (config.document && config.document.permissions && config.document.permissions.edit === false || config.editorConfig && config.editorConfig.mode == 'view'))
             params += "&mode=fillforms";
 
         if (config.document) {
@@ -1273,6 +1328,9 @@
             params += "&headingsColor=" + config.editorConfig.customization.wordHeadingsColor.replace(/#/, '');
         }
 
+        if (config.editorConfig && config.editorConfig.previewLite)
+            params += "&previewLite=1";
+
         return params;
     }
 
@@ -1280,6 +1338,26 @@
         var iframe = document.createElement("iframe");
 
         iframe.src = getAppPath(config) + getAppParameters(config);
+        if (config.editorConfig && config.editorConfig.previewLite) {
+            iframe.setAttribute("data-office-preview-lite", "true");
+            iframe.setAttribute("data-onlyoffice-preview-lite", "true");
+        }
+        setupIframe(iframe, config);
+        return iframe;
+    }
+
+    function createNativePdfPreviewIframe(config, onLoad) {
+        var iframe = document.createElement("iframe");
+
+        iframe.src = config.document.url;
+        iframe.setAttribute("data-native-pdf-preview", "true");
+        iframe.setAttribute("data-onlyoffice-native-pdf-preview", "true");
+        iframe.onload = onLoad;
+        setupIframe(iframe, config);
+        return iframe;
+    }
+
+    function setupIframe(iframe, config) {
         iframe.width = config.width;
         iframe.height = config.height;
         iframe.align = "top";
@@ -1297,7 +1375,79 @@
             iframe.style.overflow = "hidden";
             document.body.style.overscrollBehaviorY = "contain";
 		}
-        return iframe;
+    }
+
+    function getConfigFlag(config, name) {
+        var customization = config && config.editorConfig && config.editorConfig.customization;
+
+        if (config && config.document && config.document[name] !== undefined)
+            return config.document[name];
+        if (config && config[name] !== undefined)
+            return config[name];
+        if (customization && customization[name] !== undefined)
+            return customization[name];
+        return undefined;
+    }
+
+    function isPdfFile(config) {
+        return !!(config && config.document && typeof config.document.fileType === 'string' && config.document.fileType.toLowerCase() === 'pdf');
+    }
+
+    function isOfficeFile(config) {
+        var fileType = config && config.document && typeof config.document.fileType === 'string' ? config.document.fileType.toLowerCase() : '';
+
+        return /^(?:(xls|xlsx|ods|csv|tsv|gsheet|xlsm|xlt|xltm|xltx|fods|ots|xlsb|sxc|et|ett|numbers)|(pps|ppsx|ppt|pptx|odp|gslides|pot|potm|potx|ppsm|pptm|fodp|otp|sxi|dps|dpt|key|odg)|(doc|docx|odt|gdoc|txt|rtf|mht|htm|html|mhtml|epub|docm|dot|dotm|dotx|fodt|ott|fb2|xml|sxw|stw|wps|wpt|pages|hwp|hwpx|md|hml))$/.test(fileType);
+    }
+
+    function isViewOnlyMode(config) {
+        var permissions = config.document && config.document.permissions || {},
+            editorConfig = config.editorConfig || {};
+
+        return editorConfig.mode === 'view' || permissions.edit === false && permissions.review !== true;
+    }
+
+    function hasEditOrReviewMode(config) {
+        var permissions = config.document && config.document.permissions || {},
+            editorConfig = config.editorConfig || {};
+
+        return editorConfig.mode && editorConfig.mode !== 'view' ||
+               permissions.review === true ||
+               permissions.comment === true ||
+               permissions.fillForms === true ||
+               editorConfig.canRequestEditRights === true;
+    }
+
+    function shouldOpenPdfAsBinary(config) {
+        return isPdfFile(config) &&
+               getConfigFlag(config, 'openPdfAsBinary') === true &&
+               config.document && config.document.isForm === false &&
+               isViewOnlyMode(config) &&
+               !hasEditOrReviewMode(config);
+    }
+
+    function shouldUseNativePdfPreview(config) {
+        return isPdfFile(config) &&
+               getConfigFlag(config, 'openPdfInBrowser') !== false &&
+               getConfigFlag(config, 'openPdfAsBinary') !== true &&
+               config.document && config.document.isForm === false &&
+               isViewOnlyMode(config) &&
+               !hasEditOrReviewMode(config);
+    }
+
+    function shouldUseOfficePreviewLite(config) {
+        var correctedType;
+
+        if (!config || !config.editorConfig || !config.document)
+            return false;
+
+        correctedType = correct_app_type(config);
+
+        return isOfficeFile(config) &&
+               getConfigFlag(config, 'openOfficePreviewLite') !== false &&
+               correctedType !== 'mobile' &&
+               correctedType !== 'embedded' &&
+               isViewOnlyMode(config) &&
+               !hasEditOrReviewMode(config);
     }
 
     function postMessage(wnd, msg, buffer) {
@@ -1345,4 +1495,3 @@
     })();
 
 })(window.DocsAPI = window.DocsAPI || {}, window, document);
-

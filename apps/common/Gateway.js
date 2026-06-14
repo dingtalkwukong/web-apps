@@ -185,7 +185,7 @@ if (window.Common === undefined) {
 
             var data = msg.data;
             if (data && data.command === 'openDocumentFromBinary') {
-                handler = commandMap[data.command];
+                var handler = commandMap[data.command];
                 if (handler) {
                     handler.call(this, data.data);
                 }

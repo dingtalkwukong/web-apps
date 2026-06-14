@@ -45,6 +45,7 @@ define([
     'core',
     'common/main/lib/view/Header',
     'common/main/lib/view/SearchBar',
+    'common/main/lib/collection/Users',
     'spreadsheeteditor/main/app/view/Viewport'
 //    ,'spreadsheeteditor/main/app/view/LeftMenu'
 ], function (Viewport) {
@@ -55,7 +56,9 @@ define([
         models: [],
 
         // Specifying a collection of out Viewport
-        collections: [],
+        collections: [
+            'Common.Collections.Users'
+        ],
 
         // Specifying application views
         views: [
@@ -191,7 +194,9 @@ define([
         onLaunch: function() {
             // Create and render main view
             this.viewport = this.createView('Viewport').render();
-            this.getApplication().getController('CellEditor').createView('CellEditor',{ el: '#cell-editing-box' }).render();
+
+            var cellEditorController = this.getApplication().getController('CellEditor');
+            cellEditorController && cellEditorController.createView('CellEditor',{ el: '#cell-editing-box' }).render();
 
             this.api = new Asc.spreadsheet_api({
                 'id-view'  : 'editor_sdk',

@@ -411,6 +411,7 @@ define([
                 this.appOptions                 = {};
 
                 this.appOptions.customization   = this.editorConfig.customization;
+                this.appOptions.previewLite     = !!this.editorConfig.previewLite || /(?:^|[?&])previewLite=1(?:&|$)/.test(window.location.search);
                 this.appOptions.canRenameAnonymous = !((typeof (this.appOptions.customization) == 'object') && (typeof (this.appOptions.customization.anonymous) == 'object') && (this.appOptions.customization.anonymous.request===false));
                 this.appOptions.guestName = (typeof (this.appOptions.customization) == 'object') && (typeof (this.appOptions.customization.anonymous) == 'object') &&
                                             (typeof (this.appOptions.customization.anonymous.label) == 'string') && this.appOptions.customization.anonymous.label.trim()!=='' ?
@@ -767,7 +768,8 @@ define([
 
                 var application = this.getApplication(),
                     toolbarView = application.getController('Toolbar').getView('Toolbar'),
-                    rightMenu = application.getController('RightMenu').getView('RightMenu');
+                    rightMenuController = application.getController('RightMenu'),
+                    rightMenu = rightMenuController ? rightMenuController.getView('RightMenu') : null;
                 if (this.appOptions.isEdit && (toolbarView && toolbarView._isEyedropperStart || rightMenu && rightMenu._isEyedropperStart)) {
                     toolbarView._isEyedropperStart ? toolbarView._isEyedropperStart = false : rightMenu._isEyedropperStart = false;
                     this.api.asc_cancelEyedropper();
@@ -1077,9 +1079,10 @@ define([
                 leftmenuController.setMode(me.appOptions).createDelayedElements().setApi(me.api);
 
                  if (!me.appOptions.isEditMailMerge && !me.appOptions.isEditDiagram && !me.appOptions.isEditOle) {
-                     pluginsController.setApi(me.api);
+                     pluginsController && pluginsController.setApi(me.api);
                      this.api && this.api.asc_setFrozenPaneBorderType(Common.localStorage.getBool('sse-freeze-shadow', true) ? Asc.c_oAscFrozenPaneBorderType.shadow : Asc.c_oAscFrozenPaneBorderType.line);
-                     application.getController('Common.Controllers.ExternalOleEditor').setApi(this.api).loadConfig({config:this.editorConfig, customization: this.editorConfig.customization});
+                     var externalOleController = application.getController('Common.Controllers.ExternalOleEditor');
+                     externalOleController && externalOleController.setApi(this.api).loadConfig({config:this.editorConfig, customization: this.editorConfig.customization});
                  }
 
                 leftMenuView.disableMenu('all',false);
@@ -1089,7 +1092,7 @@ define([
                 }
 
                 documentHolderController.setApi(me.api).loadConfig({config:me.editorConfig});
-                chatController.setApi(this.api).setMode(this.appOptions);
+                chatController && chatController.setApi(this.api).setMode(this.appOptions);
 
                 statusbarController.createDelayedElements();
                 statusbarController.setApi(me.api);
@@ -1097,7 +1100,10 @@ define([
 
                 statusbarView.update();
 
-                this.formulaInput = celleditorController.getView('CellEditor').$el.find('textarea');
+                if (celleditorController) {
+                    var cellEditorView = celleditorController.getView('CellEditor');
+                    this.formulaInput = cellEditorView && cellEditorView.$el.find('textarea');
+                }
 
                 SSE.getController('Common.Controllers.Shortcuts').setApi(me.api);
 
@@ -1345,15 +1351,17 @@ define([
                 !disable && this.stackDisableActions.pop({type: type});
                 var prev_options = !disable && (this.stackDisableActions.length()>0) ? this.stackDisableActions.get(this.stackDisableActions.length()-1) : null;
 
-                if (options.rightMenu && app.getController('RightMenu')) {
-                    options.rightMenu.clear && app.getController('RightMenu').getView('RightMenu').clearSelection();
-                    options.rightMenu.disable && app.getController('RightMenu').SetDisabled(disable, options.allowSignature);
+                var rightMenuController = app.getController('RightMenu');
+                if (options.rightMenu && rightMenuController) {
+                    options.rightMenu.clear && rightMenuController.getView('RightMenu').clearSelection();
+                    options.rightMenu.disable && rightMenuController.SetDisabled(disable, options.allowSignature);
                 }
                 if (options.statusBar) {
                     app.getController('Statusbar').SetDisabled(disable, type);
                 }
                 if (options.review) {
-                    app.getController('Common.Controllers.ReviewChanges').SetDisabled(disable);
+                    var reviewController = app.getController('Common.Controllers.ReviewChanges');
+                    reviewController && reviewController.SetDisabled(disable);
                 }
                 if (options.viewport) {
                     app.getController('Viewport').SetDisabled(disable);
@@ -1382,7 +1390,8 @@ define([
                         comments.setPreviewMode(disable);
                 }
                 if (options.celleditor && options.celleditor.previewMode) {
-                    app.getController('CellEditor').setPreviewMode(disable);
+                    var cellEditorController = app.getController('CellEditor');
+                    cellEditorController && cellEditorController.setPreviewMode(disable);
                 }
 
                 if (options.shortcuts) {
@@ -1528,7 +1537,8 @@ define([
                 this.appOptions.isAnonymousSupport = !!this.api.asc_isAnonymousSupport();
 
                 if (!this.appOptions.isEditDiagram && !this.appOptions.isEditMailMerge && !this.appOptions.isEditOle) {
-                    this.getApplication().getController('Common.Controllers.Plugins').setMode(this.appOptions);
+                    var pluginsModeController = this.getApplication().getController('Common.Controllers.Plugins');
+                    pluginsModeController && pluginsModeController.setMode(this.appOptions);
                     Common.UI.ExternalUsers.init(this.appOptions.canRequestUsers, this.api);
                     this.appOptions.user.image ? Common.UI.ExternalUsers.setImage(this.appOptions.user.id, this.appOptions.user.image) : Common.UI.ExternalUsers.get('info', this.appOptions.user.id);
                 }
@@ -1539,6 +1549,20 @@ define([
 
                 if ( this.appOptions.isLightVersion ) {
                     this.appOptions.canUseHistory = false;
+                }
+
+                if ( this.appOptions.previewLite ) {
+                    this.appOptions.isLightVersion = true;
+                    this.appOptions.canUseHistory =
+                    this.appOptions.canHistoryClose =
+                    this.appOptions.canHistoryRestore =
+                    this.appOptions.canComments =
+                    this.appOptions.canViewComments =
+                    this.appOptions.canChat =
+                    this.appOptions.isRestrictedEdit =
+                    this.appOptions.canSaveToFile =
+                    this.appOptions.showSaveButton = false;
+                    this.appOptions.canRequestEditRights = false;
                 }
 
                 this.loadCoAuthSettings();
@@ -1706,7 +1730,7 @@ define([
                 var me = this,
                     application         = this.getApplication(),
                     reviewController    = application.getController('Common.Controllers.ReviewChanges');
-                reviewController.setMode(me.appOptions).setConfig({config: me.editorConfig}, me.api).loadDocument({doc:me.appOptions.spreadsheet});
+                reviewController && reviewController.setMode(me.appOptions).setConfig({config: me.editorConfig}, me.api).loadDocument({doc:me.appOptions.spreadsheet});
 
                 var value = Common.localStorage.getItem('sse-settings-unit');
                 value = (value!==null) ? parseInt(value) : (me.appOptions.customization && me.appOptions.customization.unit ? Common.Utils.Metric.c_MetricUnits[me.appOptions.customization.unit.toLocaleLowerCase()] : Common.Utils.Metric.getDefaultMetric());
@@ -2959,7 +2983,8 @@ define([
             updateThemeColors: function() {
                 var me = this;
                 !me.appOptions.isEditOle && !me.appOptions.isEditDiagram && setTimeout(function(){
-                    me.getApplication().getController('RightMenu').UpdateThemeColors();
+                    var rightMenuController = me.getApplication().getController('RightMenu');
+                    rightMenuController && rightMenuController.UpdateThemeColors();
                 }, 50);
 
                 !me.appOptions.isEditDiagram && setTimeout(function(){
@@ -3233,7 +3258,8 @@ define([
                 Common.Utils.Metric.setCurrentMetric(value);
                 Common.Utils.InternalSettings.set("sse-settings-unit", value);
                 if (this.appOptions.isEdit) {
-                    this.getApplication().getController('RightMenu').updateMetricUnit();
+                    var rightMenuController = this.getApplication().getController('RightMenu');
+                    rightMenuController && rightMenuController.updateMetricUnit();
                     this.getApplication().getController('Toolbar').getView('Toolbar').updateMetricUnit();
                 }
                 this.getApplication().getController('Print').getView('PrintWithPreview').updateMetricUnit();
@@ -3303,7 +3329,8 @@ define([
                                 Common.localStorage.setItem("sse-settings-coauthmode", 0);
                                 this.api.asc_SetFastCollaborative(false);
                                 Common.Utils.InternalSettings.set("sse-settings-coauthmode", false);
-                                this.getApplication().getController('Common.Controllers.ReviewChanges').applySettings();
+                                var reviewController = this.getApplication().getController('Common.Controllers.ReviewChanges');
+                                reviewController && reviewController.applySettings();
                                 this._state.fastCoauth = false;
                             }
                             this.onEditComplete();
@@ -3367,7 +3394,8 @@ define([
                 this.appOptions.spreadsheet.title = meta.title;
                 filemenu.loadDocument({doc:this.appOptions.spreadsheet});
                 filemenu.panels && filemenu.panels['info'] && filemenu.panels['info'].updateInfo(this.appOptions.spreadsheet);
-                app.getController('Common.Controllers.ReviewChanges').loadDocument({doc:this.appOptions.spreadsheet});
+                var reviewController = app.getController('Common.Controllers.ReviewChanges');
+                reviewController && reviewController.loadDocument({doc:this.appOptions.spreadsheet});
                 Common.Gateway.metaChange(meta);
 
                 if (this.appOptions.wopi) {

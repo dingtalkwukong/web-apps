@@ -171,7 +171,8 @@ define([
                 if (this.mode.canComments) {
                     this.api.asc_registerCallback('asc_onAddComment', _.bind(this.onApiAddComment, this));
                     this.api.asc_registerCallback('asc_onAddComments', _.bind(this.onApiAddComments, this));
-                    var comments = this.getApplication().getController('Common.Controllers.Comments').groupCollection;
+                    var commentsController = this.getApplication().getController('Common.Controllers.Comments'),
+                        comments = commentsController ? commentsController.groupCollection : {};
                     for (var name in comments) {
                         var collection = comments[name],
                             resolved = Common.Utils.InternalSettings.get("sse-settings-resolvedcomment");
@@ -189,10 +190,12 @@ define([
             if (!this.mode.isEditMailMerge && !this.mode.isEditDiagram && !this.mode.isEditOle)
                 this.api.asc_registerCallback('asc_onEditCell', _.bind(this.onApiEditCell, this));
             this.leftMenu.getMenu('file').setApi(api);
-            if (this.mode.canUseHistory)
-                this.getApplication().getController('Common.Controllers.History').setApi(this.api).setMode(this.mode);
-            this.getApplication().getController('Search').setApi(this.api).setMode(this.mode);
-            this.leftMenu.setOptionsPanel('advancedsearch', this.getApplication().getController('Search').getView('Common.Views.SearchPanel'));
+            var historyController = this.getApplication().getController('Common.Controllers.History'),
+                searchController = this.getApplication().getController('Search');
+            if (this.mode.canUseHistory && historyController)
+                historyController.setApi(this.api).setMode(this.mode);
+            searchController && searchController.setApi(this.api).setMode(this.mode);
+            searchController && this.leftMenu.setOptionsPanel('advancedsearch', searchController.getView('Common.Views.SearchPanel'));
             return this;
         },
 
@@ -233,19 +236,22 @@ define([
             /** coauthoring begin **/
             if ( this.mode.canCoAuthoring ) {
                 this.leftMenu.btnComments[(this.mode.canViewComments && !this.mode.isLightVersion) ? 'show' : 'hide']();
-                if (this.mode.canViewComments)
-                    this.leftMenu.setOptionsPanel('comment', this.getApplication().getController('Common.Controllers.Comments').getView('Common.Views.Comments'));
+                var commentsController = this.getApplication().getController('Common.Controllers.Comments');
+                if (this.mode.canViewComments && commentsController)
+                    this.leftMenu.setOptionsPanel('comment', commentsController.getView('Common.Views.Comments'));
 
                 this.leftMenu.btnChat[(this.mode.canChat && !this.mode.isLightVersion) ? 'show' : 'hide']();
-                if (this.mode.canChat)
-                    this.leftMenu.setOptionsPanel('chat', this.getApplication().getController('Common.Controllers.Chat').getView('Common.Views.Chat'));
+                var chatController = this.getApplication().getController('Common.Controllers.Chat');
+                if (this.mode.canChat && chatController)
+                    this.leftMenu.setOptionsPanel('chat', chatController.getView('Common.Views.Chat'));
             } else {
                 this.leftMenu.btnChat.hide();
                 this.leftMenu.btnComments.hide();
             }
 
-            if (this.mode.canUseHistory)
-                this.leftMenu.setOptionsPanel('history', this.getApplication().getController('Common.Controllers.History').getView('Common.Views.History'));
+            var historyController = this.getApplication().getController('Common.Controllers.History');
+            if (this.mode.canUseHistory && historyController)
+                this.leftMenu.setOptionsPanel('history', historyController.getView('Common.Views.History'));
 
             (this.mode.trialMode || this.mode.isBeta) && this.leftMenu.setDeveloperMode(this.mode.trialMode, this.mode.isBeta, this.mode.buildVersion);
             /** coauthoring end **/
@@ -510,7 +516,8 @@ define([
             if (this.mode.canViewComments && this.leftMenu.panelComments && this.leftMenu.panelComments.isVisible())
                 value = resolved = true;
             (value) ? this.api.asc_showComments(resolved) : this.api.asc_hideComments();
-            this.getApplication().getController('Common.Controllers.ReviewChanges').commentsShowHide(value ? 'show' : 'hide');
+            var reviewController = this.getApplication().getController('Common.Controllers.ReviewChanges');
+            reviewController && reviewController.commentsShowHide(value ? 'show' : 'hide');
 
             value = Common.localStorage.getBool("sse-settings-r1c1");
             Common.Utils.InternalSettings.set("sse-settings-r1c1", value);
@@ -754,7 +761,8 @@ define([
                 }
 
                 if (state) {
-                    this.getApplication().getController('Common.Controllers.Comments').onAfterShow();
+                    var commentsController = this.getApplication().getController('Common.Controllers.Comments');
+                    commentsController && commentsController.onAfterShow();
                 }
 
                 if (!state) $(this.leftMenu.btnComments.el).blur();
@@ -927,7 +935,8 @@ define([
                     if (this.mode.canCoAuthoring && this.mode.canViewComments && !this.mode.isLightVersion && !this.isEditFormula) {
                         Common.UI.Menu.Manager.hideAll();
                         this.leftMenu.showMenu('comments');
-                        this.getApplication().getController('Common.Controllers.Comments').onAfterShow();
+                        var commentsController = this.getApplication().getController('Common.Controllers.Comments');
+                        commentsController && commentsController.onAfterShow();
                     }
                     return false;
                 /** coauthoring end **/

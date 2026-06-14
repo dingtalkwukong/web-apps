@@ -175,15 +175,17 @@ define([
             this.api.asc_registerCallback('asc_onCountPages',            _.bind(this.onApiCountPages, this));
             this.onApiCountPages(this.api.getCountPages());
             this.leftMenu.getMenu('file').setApi(api);
-            if (this.mode.canUseHistory)
-                this.getApplication().getController('Common.Controllers.History').setApi(this.api).setMode(this.mode);
+            var historyController = this.getApplication().getController('Common.Controllers.History'),
+                searchController = this.getApplication().getController('Search');
+            if (this.mode.canUseHistory && historyController)
+                historyController.setApi(this.api).setMode(this.mode);
 
             var value = Common.UI.LayoutManager.getInitValue('leftMenu');
             value = (value!==undefined) ? !value : false;
             this.isThumbsShown = !Common.localStorage.getBool("pe-hidden-leftmenu", value);
             this.leftMenu.btnThumbs.toggle(this.isThumbsShown);
-            this.getApplication().getController('Search').setApi(this.api).setMode(this.mode);
-            this.leftMenu.setOptionsPanel('advancedsearch', this.getApplication().getController('Search').getView('Common.Views.SearchPanel'));
+            searchController && searchController.setApi(this.api).setMode(this.mode);
+            searchController && this.leftMenu.setOptionsPanel('advancedsearch', searchController.getView('Common.Views.SearchPanel'));
             return this;
         },
 
@@ -198,18 +200,21 @@ define([
             /** coauthoring begin **/
             if ( this.mode.canCoAuthoring ) {
                 this.leftMenu.btnComments[(this.mode.canViewComments && !this.mode.isLightVersion) ? 'show' : 'hide']();
-                if (this.mode.canViewComments)
-                    this.leftMenu.setOptionsPanel('comment', this.getApplication().getController('Common.Controllers.Comments').getView('Common.Views.Comments'));
+                var commentsController = this.getApplication().getController('Common.Controllers.Comments');
+                if (this.mode.canViewComments && commentsController)
+                    this.leftMenu.setOptionsPanel('comment', commentsController.getView('Common.Views.Comments'));
 
                 this.leftMenu.btnChat[(this.mode.canChat && !this.mode.isLightVersion) ? 'show' : 'hide']();
-                if (this.mode.canChat)
-                    this.leftMenu.setOptionsPanel('chat', this.getApplication().getController('Common.Controllers.Chat').getView('Common.Views.Chat'));
+                var chatController = this.getApplication().getController('Common.Controllers.Chat');
+                if (this.mode.canChat && chatController)
+                    this.leftMenu.setOptionsPanel('chat', chatController.getView('Common.Views.Chat'));
             } else {
                 this.leftMenu.btnChat.hide();
                 this.leftMenu.btnComments.hide();
             }
-            if (this.mode.canUseHistory)
-                this.leftMenu.setOptionsPanel('history', this.getApplication().getController('Common.Controllers.History').getView('Common.Views.History'));
+            var historyController = this.getApplication().getController('Common.Controllers.History');
+            if (this.mode.canUseHistory && historyController)
+                this.leftMenu.setOptionsPanel('history', historyController.getView('Common.Views.History'));
 
             (this.mode.trialMode || this.mode.isBeta) && this.leftMenu.setDeveloperMode(this.mode.trialMode, this.mode.isBeta, this.mode.buildVersion);
             /** coauthoring end **/
@@ -612,7 +617,8 @@ define([
 //                (mode=='show') ? this.api.asc_showComments() : this.api.asc_hideComments();
 
             if (mode === 'show') {
-                this.getApplication().getController('Common.Controllers.Comments').onAfterShow();
+                var commentsController = this.getApplication().getController('Common.Controllers.Comments');
+                commentsController && commentsController.onAfterShow();
             }
             $(this.leftMenu.btnComments.el).blur();
         },
@@ -746,7 +752,8 @@ define([
                     if (this.mode.canCoAuthoring && this.mode.canViewComments && !this.mode.isLightVersion && (!previewPanel || !previewPanel.isVisible()) && !this._state.no_slides) {
                         Common.UI.Menu.Manager.hideAll();
                         this.leftMenu.showMenu('comments');
-                        this.getApplication().getController('Common.Controllers.Comments').onAfterShow();
+                        var commentsController = this.getApplication().getController('Common.Controllers.Comments');
+                        commentsController && commentsController.onAfterShow();
                     }
                     return false;
                 /** coauthoring end **/

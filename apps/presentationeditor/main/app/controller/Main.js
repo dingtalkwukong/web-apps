@@ -377,6 +377,7 @@ define([
                 this.editorConfig = $.extend(this.editorConfig, data.config);
 
                 this.appOptions.customization   = this.editorConfig.customization;
+                this.appOptions.previewLite     = !!this.editorConfig.previewLite || /(?:^|[?&])previewLite=1(?:&|$)/.test(window.location.search);
                 this.appOptions.canRenameAnonymous = !((typeof (this.appOptions.customization) == 'object') && (typeof (this.appOptions.customization.anonymous) == 'object') && (this.appOptions.customization.anonymous.request===false));
                 this.appOptions.guestName = (typeof (this.appOptions.customization) == 'object') && (typeof (this.appOptions.customization.anonymous) == 'object') &&
                                             (typeof (this.appOptions.customization.anonymous.label) == 'string') && this.appOptions.customization.anonymous.label.trim()!=='' ?
@@ -676,7 +677,8 @@ define([
             onEditComplete: function(cmp) {
                 var application = this.getApplication(),
                     toolbarView = application.getController('Toolbar').getView('Toolbar'),
-                    rightMenu = application.getController('RightMenu').getView('RightMenu');
+                    rightMenuController = application.getController('RightMenu'),
+                    rightMenu = rightMenuController ? rightMenuController.getView('RightMenu') : null;
 
                 if (this.appOptions.isEdit && toolbarView && toolbarView.btnHighlightColor.pressed &&
                     ( !_.isObject(arguments[1]) || arguments[1].id !== 'id-toolbar-btn-highlight')) {
@@ -1031,11 +1033,13 @@ define([
                 leftmenuController.getView('LeftMenu').getMenu('file').loadDocument({doc:me.document});
                 leftmenuController.setMode(me.appOptions).createDelayedElements().setApi(me.api);
 
-                chatController.setApi(this.api).setMode(this.appOptions);
-                application.getController('Common.Controllers.ExternalDiagramEditor').setApi(this.api).loadConfig({config:this.editorConfig, customization: this.editorConfig.customization});
-                application.getController('Common.Controllers.ExternalOleEditor').setApi(this.api).loadConfig({config:this.editorConfig, customization: this.editorConfig.customization});
+                chatController && chatController.setApi(this.api).setMode(this.appOptions);
+                var diagramEditorController = application.getController('Common.Controllers.ExternalDiagramEditor'),
+                    oleEditorController = application.getController('Common.Controllers.ExternalOleEditor');
+                diagramEditorController && diagramEditorController.setApi(this.api).loadConfig({config:this.editorConfig, customization: this.editorConfig.customization});
+                oleEditorController && oleEditorController.setApi(this.api).loadConfig({config:this.editorConfig, customization: this.editorConfig.customization});
 
-                pluginsController.setApi(me.api);
+                pluginsController && pluginsController.setApi(me.api);
 
                 documentHolderController.setApi(me.api);
                 // documentHolderController.createDelayedElements();
@@ -1254,15 +1258,17 @@ define([
                 !disable && this.stackDisableActions.pop({type: type});
                 var prev_options = !disable && (this.stackDisableActions.length()>0) ? this.stackDisableActions.get(this.stackDisableActions.length()-1) : null;
 
-                if (options.rightMenu && app.getController('RightMenu')) {
-                    options.rightMenu.clear && app.getController('RightMenu').getView('RightMenu').clearSelection();
-                    options.rightMenu.disable && app.getController('RightMenu').SetDisabled(disable, options.allowSignature);
+                var rightMenuController = app.getController('RightMenu');
+                if (options.rightMenu && rightMenuController) {
+                    options.rightMenu.clear && rightMenuController.getView('RightMenu').clearSelection();
+                    options.rightMenu.disable && rightMenuController.SetDisabled(disable, options.allowSignature);
                 }
                 if (options.statusBar) {
                     app.getController('Statusbar').getView('Statusbar').SetDisabled(disable);
                 }
                 if (options.review) {
-                    app.getController('Common.Controllers.ReviewChanges').SetDisabled(disable);
+                    var reviewController = app.getController('Common.Controllers.ReviewChanges');
+                    reviewController && reviewController.SetDisabled(disable);
                 }
                 if (options.viewport) {
                     app.getController('Viewport').SetDisabled(disable);
@@ -1400,6 +1406,20 @@ define([
                     this.appOptions.canUseHistory = false;
                 }
 
+                if ( this.appOptions.previewLite ) {
+                    this.appOptions.isLightVersion = true;
+                    this.appOptions.canUseHistory =
+                    this.appOptions.canHistoryClose =
+                    this.appOptions.canHistoryRestore =
+                    this.appOptions.canComments =
+                    this.appOptions.canViewComments =
+                    this.appOptions.canChat =
+                    this.appOptions.isRestrictedEdit =
+                    this.appOptions.canSaveToFile =
+                    this.appOptions.showSaveButton = false;
+                    this.appOptions.canRequestEditRights = false;
+                }
+
                 this.appOptions.canBrandingExt = params.asc_getCanBranding() && (typeof this.editorConfig.customization == 'object' || this.editorConfig.plugins);
                 Common.UI.LayoutManager.init(this.editorConfig.customization ? this.editorConfig.customization.layout : null, this.appOptions.canBrandingExt, this.api);
                 this.editorConfig.customization && Common.UI.FeaturesManager.init(this.editorConfig.customization.features, this.appOptions.canBrandingExt);
@@ -1427,7 +1447,8 @@ define([
                 appHeader.setUserAvatar(this.appOptions.user.image);
 
                 this.appOptions.canRename && appHeader.setCanRename(true);
-                this.getApplication().getController('Common.Controllers.Plugins').setMode(this.appOptions);
+                var pluginsModeController = this.getApplication().getController('Common.Controllers.Plugins');
+                pluginsModeController && pluginsModeController.setMode(this.appOptions);
                 Common.UI.ExternalUsers.init(this.appOptions.canRequestUsers, this.api);
                 this.appOptions.user.image ? Common.UI.ExternalUsers.setImage(this.appOptions.user.id, this.appOptions.user.image) : Common.UI.ExternalUsers.get('info', this.appOptions.user.id);
 
@@ -1562,7 +1583,7 @@ define([
                 var me = this,
                     application         = this.getApplication(),
                     reviewController    = application.getController('Common.Controllers.ReviewChanges');
-                reviewController.setMode(me.appOptions).setConfig({config: me.editorConfig}, me.api).loadDocument({doc:me.document});
+                reviewController && reviewController.setMode(me.appOptions).setConfig({config: me.editorConfig}, me.api).loadDocument({doc:me.document});
 
                 var toolbarController   = application.getController('Toolbar');
                 toolbarController   && toolbarController.setApi(me.api);
@@ -2206,11 +2227,13 @@ define([
             },
 
             onInsertTable:  function() {
-                this.getApplication().getController('RightMenu').onInsertTable();
+                var rightMenuController = this.getApplication().getController('RightMenu');
+                rightMenuController && rightMenuController.onInsertTable();
             },
 
             onInsertImage:  function() {
-                this.getApplication().getController('RightMenu').onInsertImage();
+                var rightMenuController = this.getApplication().getController('RightMenu');
+                rightMenuController && rightMenuController.onInsertImage();
             },
 
             // onInsertChart:  function() {
@@ -2218,11 +2241,13 @@ define([
             // },
 
             onInsertShape:  function() {
-                this.getApplication().getController('RightMenu').onInsertShape();
+                var rightMenuController = this.getApplication().getController('RightMenu');
+                rightMenuController && rightMenuController.onInsertShape();
             },
 
             onInsertTextArt:  function() {
-                this.getApplication().getController('RightMenu').onInsertTextArt();
+                var rightMenuController = this.getApplication().getController('RightMenu');
+                rightMenuController && rightMenuController.onInsertTextArt();
             },
 
             unitsChanged: function(m) {
@@ -2231,14 +2256,16 @@ define([
                 Common.Utils.Metric.setCurrentMetric(value);
                 Common.Utils.InternalSettings.set("pe-settings-unit", value);
                 this.api.asc_SetDocumentUnits((value==Common.Utils.Metric.c_MetricUnits.inch) ? Asc.c_oAscDocumentUnits.Inch : ((value==Common.Utils.Metric.c_MetricUnits.pt) ? Asc.c_oAscDocumentUnits.Point : Asc.c_oAscDocumentUnits.Millimeter));
-                this.getApplication().getController('RightMenu').updateMetricUnit();
+                var rightMenuController = this.getApplication().getController('RightMenu');
+                rightMenuController && rightMenuController.updateMetricUnit();
                 this.appOptions.canPreviewPrint && this.getApplication().getController('Print').getView('PrintWithPreview').updateMetricUnit();
             },
 
             updateThemeColors: function() {
                 var me = this;
                 setTimeout(function(){
-                    me.getApplication().getController('RightMenu').UpdateThemeColors();
+                    var rightMenuController = me.getApplication().getController('RightMenu');
+                    rightMenuController && rightMenuController.UpdateThemeColors();
                 }, 50);
 
                 setTimeout(function(){
@@ -2437,7 +2464,8 @@ define([
                 if (this.languages && this.languages.length>0) {
                     this.getApplication().getController('DocumentHolder').getView().setLanguages(this.languages);
                     this.getApplication().getController('Statusbar').setLanguages(this.languages);
-                    this.getApplication().getController('Common.Controllers.ReviewChanges').setLanguages(this.languages);
+                    var reviewController = this.getApplication().getController('Common.Controllers.ReviewChanges');
+                    reviewController && reviewController.setLanguages(this.languages);
                 }
             },
 
@@ -2456,7 +2484,8 @@ define([
                                 Common.localStorage.setItem("pe-settings-coauthmode", 0);
                                 this.api.asc_SetFastCollaborative(false);
                                 Common.Utils.InternalSettings.set("pe-settings-coauthmode", false);
-                                this.getApplication().getController('Common.Controllers.ReviewChanges').applySettings();
+                                var reviewController = this.getApplication().getController('Common.Controllers.ReviewChanges');
+                                reviewController && reviewController.applySettings();
                                 this._state.fastCoauth = false;
                             }
                             this.onEditComplete();
@@ -2519,7 +2548,8 @@ define([
                 var filemenu = this.getApplication().getController('LeftMenu').getView('LeftMenu').getMenu('file');
                 filemenu.loadDocument({doc:this.document});
                 filemenu.panels && filemenu.panels['info'] && filemenu.panels['info'].updateInfo(this.document);
-                this.getApplication().getController('Common.Controllers.ReviewChanges').loadDocument({doc:this.document});
+                var reviewController = this.getApplication().getController('Common.Controllers.ReviewChanges');
+                reviewController && reviewController.loadDocument({doc:this.document});
                 Common.Gateway.metaChange(meta);
 
                 if (this.appOptions.wopi) {

@@ -116,6 +116,7 @@ require([
         return;
     Backbone.history.start();
     window._ = _;
+    var previewLite = /(?:^|[?&])previewLite=1(?:&|$)/.test(window.location.search);
 
     /**
      * Application instance with SSE namespace defined
@@ -123,7 +124,19 @@ require([
     var app = new Backbone.Application({
         nameSpace: 'SSE',
         autoCreate: false,
-        controllers : [
+        controllers : previewLite ? [
+            'Viewport',
+            'DocumentHolder',
+            'Toolbar',
+            'Statusbar',
+            'LeftMenu',
+            'Main',
+            'ViewTab',
+            'Search',
+            'Print',
+            'Common.Controllers.Fonts',
+            'Common.Controllers.Shortcuts'
+        ] : [
             'Viewport',
             'DocumentHolder',
             'CellEditor',
@@ -159,7 +172,28 @@ require([
     });
 
     Common.Locale.apply(function(){
-        require([
+        require(previewLite ? [
+            'common/main/lib/mods/dropdown',
+            'common/main/lib/mods/tooltip',
+            'common/main/lib/util/LocalStorage',
+            'common/main/lib/controller/Scaling',
+            'common/main/lib/controller/Themes',
+            'common/main/lib/controller/TabStyler',
+            'common/main/lib/controller/Desktop',
+            'common/main/lib/collection/Users',
+            'spreadsheeteditor/main/app/controller/Viewport',
+            'spreadsheeteditor/main/app/controller/DocumentHolder',
+            'spreadsheeteditor/main/app/controller/Toolbar',
+            'spreadsheeteditor/main/app/controller/Statusbar',
+            'spreadsheeteditor/main/app/controller/LeftMenu',
+            'spreadsheeteditor/main/app/controller/Main',
+            'spreadsheeteditor/main/app/controller/ViewTab',
+            'spreadsheeteditor/main/app/controller/Search',
+            'spreadsheeteditor/main/app/controller/Print',
+            'common/main/lib/util/utils',
+            'common/main/lib/controller/Fonts',
+            'common/main/lib/controller/Shortcuts'
+        ] : [
             'common/main/lib/mods/dropdown',
             'common/main/lib/mods/tooltip',
             'common/main/lib/util/LocalStorage',
@@ -307,6 +341,11 @@ require([
                 'spreadsheeteditor/main/app/view/SolverMethodDialog',
                 'spreadsheeteditor/main/app/view/SolverResultsDlg'
             ];
+            if (previewLite) {
+                app.postLaunchScripts = [
+                    'spreadsheeteditor/main/app_pack_lite'
+                ];
+            }
 
             window.compareVersions = true;
             app.start();

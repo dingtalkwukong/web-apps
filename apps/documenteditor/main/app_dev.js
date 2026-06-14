@@ -117,6 +117,7 @@ require([
         return;
     Backbone.history.start();
     window._ = _;
+    var previewLite = /(?:^|[?&])previewLite=1(?:&|$)/.test(window.location.search);
 
     /**
      * Application instance with DE namespace defined
@@ -124,7 +125,19 @@ require([
     var app = new Backbone.Application({
         nameSpace: 'DE',
         autoCreate: false,
-        controllers : [
+        controllers : previewLite ? [
+            'Viewport',
+            'DocumentHolder',
+            'Toolbar',
+            'Statusbar',
+            'LeftMenu',
+            'Main',
+            'ViewTab',
+            'Search',
+            'Print',
+            'Common.Controllers.Fonts',
+            'Common.Controllers.Shortcuts'
+        ] : [
             'Viewport',
             'DocumentHolder',
             'Toolbar',
@@ -163,7 +176,28 @@ require([
 
     Common.Locale.apply(
         function() {
-            require([
+            require(previewLite ? [
+                'common/main/lib/mods/dropdown',
+                'common/main/lib/mods/tooltip',
+                'common/main/lib/util/LocalStorage',
+                'common/main/lib/controller/Scaling',
+                'common/main/lib/controller/Themes',
+                'common/main/lib/controller/TabStyler',
+                'common/main/lib/controller/Desktop',
+                'common/main/lib/collection/Users',
+                'documenteditor/main/app/controller/Viewport',
+                'documenteditor/main/app/controller/DocumentHolder',
+                'documenteditor/main/app/controller/Toolbar',
+                'documenteditor/main/app/controller/Statusbar',
+                'documenteditor/main/app/controller/LeftMenu',
+                'documenteditor/main/app/controller/Main',
+                'documenteditor/main/app/controller/ViewTab',
+                'documenteditor/main/app/controller/Search',
+                'documenteditor/main/app/controller/Print',
+                'common/main/lib/util/utils',
+                'common/main/lib/controller/Fonts',
+                'common/main/lib/controller/Shortcuts'
+            ] : [
                 'common/main/lib/mods/dropdown',
                 'common/main/lib/mods/tooltip',
                 'common/main/lib/util/LocalStorage',
@@ -285,6 +319,11 @@ require([
                     'documenteditor/main/app/view/PageNumberingDlg',
                     'documenteditor/main/app/view/MailMergeEmailDlg'
                 ];
+                if (previewLite) {
+                    app.postLaunchScripts = [
+                        'documenteditor/main/app_pack_lite'
+                    ];
+                }
 
                 window.compareVersions = true;
                 app.start();

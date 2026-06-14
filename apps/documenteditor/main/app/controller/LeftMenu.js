@@ -185,11 +185,14 @@ define([
             }
             /** coauthoring end **/
             this.leftMenu.getMenu('file').setApi(api);
-            if (this.mode.canUseHistory)
-                this.getApplication().getController('Common.Controllers.History').setApi(this.api).setMode(this.mode);
-            this.getApplication().getController('PageThumbnails').setApi(this.api).setMode(this.mode);
-            this.getApplication().getController('Search').setApi(this.api).setMode(this.mode);
-            this.leftMenu.setOptionsPanel('advancedsearch', this.getApplication().getController('Search').getView('Common.Views.SearchPanel'));
+            var historyController = this.getApplication().getController('Common.Controllers.History'),
+                thumbnailsController = this.getApplication().getController('PageThumbnails'),
+                searchController = this.getApplication().getController('Search');
+            if (this.mode.canUseHistory && historyController)
+                historyController.setApi(this.api).setMode(this.mode);
+            thumbnailsController && thumbnailsController.setApi(this.api).setMode(this.mode);
+            searchController && searchController.setApi(this.api).setMode(this.mode);
+            searchController && this.leftMenu.setOptionsPanel('advancedsearch', searchController.getView('Common.Views.SearchPanel'));
             return this;
         },
 
@@ -204,25 +207,31 @@ define([
             /** coauthoring begin **/
             if ( this.mode.canCoAuthoring ) {
                 this.leftMenu.btnComments[(this.mode.canViewComments && !this.mode.isLightVersion) ? 'show' : 'hide']();
-                if (this.mode.canViewComments)
-                    this.leftMenu.setOptionsPanel('comment', this.getApplication().getController('Common.Controllers.Comments').getView());
+                var commentsController = this.getApplication().getController('Common.Controllers.Comments');
+                if (this.mode.canViewComments && commentsController)
+                    this.leftMenu.setOptionsPanel('comment', commentsController.getView());
 
                 this.leftMenu.btnChat[(this.mode.canChat && !this.mode.isLightVersion) ? 'show' : 'hide']();
-                if (this.mode.canChat)
-                    this.leftMenu.setOptionsPanel('chat', this.getApplication().getController('Common.Controllers.Chat').getView('Common.Views.Chat'));
+                var chatController = this.getApplication().getController('Common.Controllers.Chat');
+                if (this.mode.canChat && chatController)
+                    this.leftMenu.setOptionsPanel('chat', chatController.getView('Common.Views.Chat'));
             } else {
                 this.leftMenu.btnChat.hide();
                 this.leftMenu.btnComments.hide();
             }
             /** coauthoring end **/
 
-            if (this.mode.canUseHistory)
-                this.leftMenu.setOptionsPanel('history', this.getApplication().getController('Common.Controllers.History').getView('Common.Views.History'));
+            var historyController = this.getApplication().getController('Common.Controllers.History'),
+                navigationController = this.getApplication().getController('Navigation'),
+                thumbnailsController = this.getApplication().getController('PageThumbnails');
 
-            this.leftMenu.setOptionsPanel('navigation', this.getApplication().getController('Navigation').getView('Navigation'));
+            if (this.mode.canUseHistory && historyController)
+                this.leftMenu.setOptionsPanel('history', historyController.getView('Common.Views.History'));
 
-            if (this.mode.canUseThumbnails) {
-                this.leftMenu.setOptionsPanel('thumbnails', this.getApplication().getController('PageThumbnails').getView('PageThumbnails'));
+            navigationController && this.leftMenu.setOptionsPanel('navigation', navigationController.getView('Navigation'));
+
+            if (this.mode.canUseThumbnails && thumbnailsController) {
+                this.leftMenu.setOptionsPanel('thumbnails', thumbnailsController.getView('PageThumbnails'));
             } else {
                 this.leftMenu.btnThumbnails.hide();
             }
@@ -509,7 +518,8 @@ define([
             if (this.mode.canViewComments && this.leftMenu.panelComments && this.leftMenu.panelComments.isVisible())
                 value = resolved = true;
             (value) ? this.api.asc_showComments(resolved) : this.api.asc_hideComments();
-            this.getApplication().getController('Common.Controllers.ReviewChanges').commentsShowHide(value ? 'show' : 'hide');
+            var reviewController = this.getApplication().getController('Common.Controllers.ReviewChanges');
+            reviewController && reviewController.commentsShowHide(value ? 'show' : 'hide');
             /** coauthoring end **/
 
             value = Common.localStorage.getBool("de-settings-cachemode", true);
@@ -775,7 +785,8 @@ define([
             }
 
             if (mode === 'show') {
-                this.getApplication().getController('Common.Controllers.Comments').onAfterShow();
+                var commentsController = this.getApplication().getController('Common.Controllers.Comments');
+                commentsController && commentsController.onAfterShow();
             }
 
             $(this.leftMenu.btnComments.el).blur();
@@ -940,7 +951,8 @@ define([
                     if (this.mode.canCoAuthoring && this.mode.canViewComments && !this.mode.isLightVersion) {
                         Common.UI.Menu.Manager.hideAll();
                         this.leftMenu.showMenu('comments');
-                        this.getApplication().getController('Common.Controllers.Comments').onAfterShow();
+                        var commentsController = this.getApplication().getController('Common.Controllers.Comments');
+                        commentsController && commentsController.onAfterShow();
                     }
                     return false;
             /** coauthoring end **/

@@ -183,7 +183,9 @@ define([
 
         createPostLoadElements: function() {
             var me = this;
-            me.setEvents();
+            if (typeof me.setEvents === 'function') {
+                me.setEvents();
+            }
             me.permissions.isEdit ? me.documentHolder.createDelayedElements() : me.documentHolder.createDelayedElementsViewer();
 
             if (me.type !== 'edit') {

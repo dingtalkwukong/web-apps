@@ -835,7 +835,8 @@ define([
         },
 
         onFormatCellFill: function(picker, color) {
-            this.getApplication().getController('RightMenu').onRightMenuOpen(Common.Utils.documentSettingsType.Cell);
+            var rightMenuController = this.getApplication().getController('RightMenu');
+            rightMenuController && rightMenuController.onRightMenuOpen(Common.Utils.documentSettingsType.Cell);
         },
 
         onNewBorderColor: function(picker, color) {
@@ -912,8 +913,10 @@ define([
 
                 Common.NotificationCenter.trigger('edit:complete', me.toolbar);
                 Common.component.Analytics.trackEvent('ToolBar', 'Borders');
-            } else if (item.value==='options')
-                this.getApplication().getController('RightMenu').onRightMenuOpen(Common.Utils.documentSettingsType.Cell);
+            } else if (item.value==='options') {
+                var rightMenuController = this.getApplication().getController('RightMenu');
+                rightMenuController && rightMenuController.onRightMenuOpen(Common.Utils.documentSettingsType.Cell);
+            }
         },
 
         onBordersWidth: function(menu, item, state) {
@@ -1041,7 +1044,8 @@ define([
                 var angle = 0;
 
                 if (item.value==='options') {
-                    this.getApplication().getController('RightMenu').onRightMenuOpen(Common.Utils.documentSettingsType.Cell);
+                    var rightMenuController = this.getApplication().getController('RightMenu');
+                    rightMenuController && rightMenuController.onRightMenuOpen(Common.Utils.documentSettingsType.Cell);
                     return;
                 }
 
@@ -2762,7 +2766,8 @@ define([
                 }
 
                 if ( this.appConfig.isDesktopApp && (this.appConfig.isSignatureSupport || this.appConfig.isPasswordSupport) ) {
-                    this.getApplication().getController('Common.Controllers.Protection').SetDisabled(is_cell_edited, false);
+                    var protectionController = this.getApplication().getController('Common.Controllers.Protection');
+                    protectionController && protectionController.SetDisabled(is_cell_edited, false);
                 }
             } else {
                 if (state == Asc.c_oAscCellEditorState.editText) var is_text = true, is_formula = false; else
@@ -4109,7 +4114,8 @@ define([
             }
 
             if (!_.isUndefined(opts.formula)) {
-                var cellEditor  = this.getApplication().getController('CellEditor').getView('CellEditor');
+                var cellEditorController = this.getApplication().getController('CellEditor'),
+                    cellEditor = cellEditorController ? cellEditorController.getView('CellEditor') : null;
                 cellEditor && cellEditor.setVisible(!opts.formula);
 
                 Common.NotificationCenter.trigger('layout:changed', 'celleditor', opts.formula?'hidden':'showed');
@@ -4733,7 +4739,8 @@ define([
 
             if ( !config.isEditDiagram && !config.isEditMailMerge && !config.isEditOle ) {
                 var tab = {action: 'review', caption: me.toolbar.textTabCollaboration, layoutname: 'toolbar-collaboration', dataHintTitle: 'U'};
-                var $panel = me.getApplication().getController('Common.Controllers.ReviewChanges').createToolbarPanel();
+                var reviewController = me.getApplication().getController('Common.Controllers.ReviewChanges'),
+                    $panel = reviewController ? reviewController.createToolbarPanel() : null;
                 if ($panel) {
                     me.toolbar.addTab(tab, $panel, 6);
                     me.toolbar.setVisible('review', (config.isEdit || config.canViewReview || config.canCoAuthoring && config.canComments) && Common.UI.LayoutManager.isElementVisible('toolbar-collaboration'));
@@ -4751,13 +4758,15 @@ define([
 
                 if ( !config.isEditDiagram && !config.isEditMailMerge && !config.isEditOle ) {
                     var drawtab = me.getApplication().getController('Common.Controllers.Draw');
-                    drawtab.setApi(me.api).setMode(config);
-                    $panel = drawtab.createToolbarPanel();
-                    if ($panel) {
-                        tab = {action: 'draw', caption: me.toolbar.textTabDraw, extcls: 'canedit', layoutname: 'toolbar-draw', dataHintTitle: 'C'};
-                        me.toolbar.addTab(tab, $panel, 2);
-                        me.toolbar.setVisible('draw', Common.UI.LayoutManager.isElementVisible('toolbar-draw'));
-                        Array.prototype.push.apply(me.toolbar.lockControls, drawtab.getView().getButtons());
+                    if (drawtab) {
+                        drawtab.setApi(me.api).setMode(config);
+                        $panel = drawtab.createToolbarPanel();
+                        if ($panel) {
+                            tab = {action: 'draw', caption: me.toolbar.textTabDraw, extcls: 'canedit', layoutname: 'toolbar-draw', dataHintTitle: 'C'};
+                            me.toolbar.addTab(tab, $panel, 2);
+                            me.toolbar.setVisible('draw', Common.UI.LayoutManager.isElementVisible('toolbar-draw'));
+                            Array.prototype.push.apply(me.toolbar.lockControls, drawtab.getView().getButtons());
+                        }
                     }
 
                     var datatab = me.getApplication().getController('DataTab');
@@ -4890,18 +4899,21 @@ define([
                                                             [_set.lostConnect, _set.commentLock, _set.editCell, _set['Objects']], undefined, undefined, undefined, '1', 'bottom', 'small');
 
                 if ( this.btnsComment.length ) {
-                    var _comments = SSE.getController('Common.Controllers.Comments').getView();
-                    this.btnsComment.forEach(function (btn) {
-                        btn.updateHint( _comments.textHintAddComment );
-                        btn.on('click', function (btn, e) {
-                            Common.NotificationCenter.trigger('app:comment:add', 'toolbar', me.api.asc_getCellInfo().asc_getSelectionType() != Asc.c_oAscSelectionType.RangeCells);
-                        });
-                        if (btn.cmpEl.closest('#review-changes-panel').length>0)
-                            btn.setCaption(me.toolbar.capBtnAddComment);
-                    }, this);
-                    if (_comments.buttonAddNew) {
-                        _comments.buttonAddNew.options.lock = [ _set.lostConnect, _set.commentLock, _set.editCell, _set['Objects'] ];
-                        this.btnsComment.add(_comments.buttonAddNew);
+                    var commentsController = SSE.getController('Common.Controllers.Comments'),
+                        _comments = commentsController ? commentsController.getView() : null;
+                    if (_comments) {
+                        this.btnsComment.forEach(function (btn) {
+                            btn.updateHint( _comments.textHintAddComment );
+                            btn.on('click', function (btn, e) {
+                                Common.NotificationCenter.trigger('app:comment:add', 'toolbar', me.api.asc_getCellInfo().asc_getSelectionType() != Asc.c_oAscSelectionType.RangeCells);
+                            });
+                            if (btn.cmpEl.closest('#review-changes-panel').length>0)
+                                btn.setCaption(me.toolbar.capBtnAddComment);
+                        }, this);
+                        if (_comments.buttonAddNew) {
+                            _comments.buttonAddNew.options.lock = [ _set.lostConnect, _set.commentLock, _set.editCell, _set['Objects'] ];
+                            this.btnsComment.add(_comments.buttonAddNew);
+                        }
                     }
                     Array.prototype.push.apply(me.toolbar.lockControls, this.btnsComment);
                     Common.UI.LayoutManager.addControls(this.btnsComment);

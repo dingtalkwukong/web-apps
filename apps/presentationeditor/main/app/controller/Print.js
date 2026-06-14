@@ -75,6 +75,9 @@ define([
 
         onPostLoadComplete: function() {
             this.views = this.getApplication().getClasseRefs('view', ['PrintWithPreview']);
+            if (typeof this.views.PrintWithPreview !== 'function') {
+                return;
+            }
             this.printSettings = this.createView('PrintWithPreview');
             this.setMode(this.mode);
         },

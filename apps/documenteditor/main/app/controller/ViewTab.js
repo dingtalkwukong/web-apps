@@ -175,7 +175,7 @@ define([
                     }
 
                     const rightmenuController = me.getApplication().getController('RightMenu');
-                    const rightmenuView = rightmenuController.getView('RightMenu');
+                    const rightmenuView = rightmenuController && rightmenuController.getView('RightMenu');
                     const isPdfWithButtons = config.isPDFForm && rightmenuView && rightmenuView.getVisibleButtons().length > 0;
                     if (!config.isEdit && !isPdfWithButtons || 
                         config.canBrandingExt && config.customization && config.customization.rightMenu === false || 

@@ -117,6 +117,7 @@ require([
         return;
     Backbone.history.start();
     window._ = _;
+    var previewLite = /(?:^|[?&])previewLite=1(?:&|$)/.test(window.location.search);
 
     /**
      * Application instance with PE namespace defined
@@ -124,7 +125,19 @@ require([
     var app = new Backbone.Application({
         nameSpace: 'PE',
         autoCreate: false,
-        controllers : [
+        controllers : previewLite ? [
+            'Viewport',
+            'DocumentHolder',
+            'Toolbar',
+            'Statusbar',
+            'LeftMenu',
+            'Main',
+            'ViewTab',
+            'Search',
+            'Print',
+            'Common.Controllers.Fonts',
+            'Common.Controllers.Shortcuts'
+        ] : [
             'Viewport',
             'DocumentHolder',
             'Toolbar',
@@ -158,7 +171,28 @@ require([
     });
 
     Common.Locale.apply(function(){
-        require([
+        require(previewLite ? [
+            'common/main/lib/mods/dropdown',
+            'common/main/lib/mods/tooltip',
+            'common/main/lib/util/LocalStorage',
+            'common/main/lib/controller/Scaling',
+            'common/main/lib/controller/Themes',
+            'common/main/lib/controller/TabStyler',
+            'common/main/lib/controller/Desktop',
+            'common/main/lib/collection/Users',
+            'presentationeditor/main/app/controller/Viewport',
+            'presentationeditor/main/app/controller/DocumentHolder',
+            'presentationeditor/main/app/controller/Toolbar',
+            'presentationeditor/main/app/controller/Statusbar',
+            'presentationeditor/main/app/controller/LeftMenu',
+            'presentationeditor/main/app/controller/Main',
+            'presentationeditor/main/app/controller/ViewTab',
+            'presentationeditor/main/app/controller/Search',
+            'presentationeditor/main/app/controller/Print',
+            'common/main/lib/util/utils',
+            'common/main/lib/controller/Fonts',
+            'common/main/lib/controller/Shortcuts'
+        ] : [
             'common/main/lib/mods/dropdown',
             'common/main/lib/mods/tooltip',
             'common/main/lib/util/LocalStorage',
@@ -257,6 +291,11 @@ require([
                 'presentationeditor/main/app/view/DateTimeDialog',
                 'presentationeditor/main/app/view/ChartSettingsAdvanced'
             ];
+            if (previewLite) {
+                app.postLaunchScripts = [
+                    'presentationeditor/main/app_pack_lite'
+                ];
+            }
 
             window.compareVersions = true;
             app.start();
