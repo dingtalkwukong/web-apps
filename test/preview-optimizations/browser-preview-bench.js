@@ -683,6 +683,55 @@ function percentReduction(base, optimized) {
   return Math.round((1 - optimized / base) * 100);
 }
 
+function scenarioMetrics(item) {
+  return {
+    reason: item.result.reason,
+    elapsedMs: item.result.elapsedMs,
+    iframeLoadMs: item.result.iframeLoadMs,
+    requestCount: item.summary.requestCount,
+    totalBytes: item.summary.totalBytes,
+    fixtureRequests: item.summary.fixtureRequests,
+    fixtureBytes: item.summary.fixtureBytes,
+    nonSdkJsCssRequests: item.summary.nonSdkJsCssRequests,
+    nonSdkJsCssBytes: item.summary.nonSdkJsCssBytes
+  };
+}
+
+function comparePreviewTiming(optimized, baseline) {
+  return {
+    optimized: scenarioMetrics(optimized),
+    baseline: scenarioMetrics(baseline),
+    elapsedReductionPercent: percentReduction(baseline.result.elapsedMs, optimized.result.elapsedMs),
+    requestReductionPercent: percentReduction(baseline.summary.requestCount, optimized.summary.requestCount),
+    totalByteReductionPercent: percentReduction(baseline.summary.totalBytes, optimized.summary.totalBytes),
+    nonSdkJsCssByteReductionPercent: percentReduction(baseline.summary.nonSdkJsCssBytes, optimized.summary.nonSdkJsCssBytes),
+    nonSdkJsCssRequestReductionPercent: percentReduction(baseline.summary.nonSdkJsCssRequests, optimized.summary.nonSdkJsCssRequests)
+  };
+}
+
+function buildPreviewTimeSummary(results) {
+  const byName = Object.fromEntries(results.map(item => [item.scenario, item]));
+  const largePdf = byName['pdf-large-native'];
+  const pdfFallback = byName['pdf-fallback'];
+  const largePdfEditorOverheadBytes = Math.max(0, largePdf.summary.totalBytes - largePdf.summary.fixtureBytes);
+
+  return {
+    pdfNative: comparePreviewTiming(byName['pdf-native'], pdfFallback),
+    pdfUnknownFormNative: scenarioMetrics(byName['pdf-unknown-form-native']),
+    pdfFillformsModeNative: scenarioMetrics(byName['pdf-fillforms-mode-native']),
+    largePdfNative: Object.assign(scenarioMetrics(largePdf), {
+      generatedFixtureBytes: LARGE_PDF_BYTES,
+      editorOverheadBytes: largePdfEditorOverheadBytes,
+      editorOverheadByteReductionVsPdfFallbackPercent: percentReduction(pdfFallback.summary.totalBytes, largePdfEditorOverheadBytes)
+    }),
+    office: {
+      docx: comparePreviewTiming(byName['office-lite'], byName['office-full']),
+      xlsx: comparePreviewTiming(byName['office-lite-xlsx'], byName['office-full-xlsx']),
+      pptx: comparePreviewTiming(byName['office-lite-pptx'], byName['office-full-pptx'])
+    }
+  };
+}
+
 function isIgnorableRuntimeError(error) {
   return /WebSocket connection to .*ERR_BLOCKED_BY_LOCAL_NETWORK_ACCESS_CHECKS/.test(error) ||
     /^Failed to load resource: the server responded with a status of 404 \(Not Found\)$/.test(error) ||
@@ -764,7 +813,7 @@ function assertBench(results, options) {
     assert.ok(fs.existsSync(filePath), `fixture missing: ${filePath}`);
   }
 
-	  const chrome = findChrome();
+  const chrome = findChrome();
   const options = parseArgs(process.argv.slice(2));
   const docsApiUrl = options.documentServer ?
     options.documentServer + '/web-apps/apps/api/documents/api.js' :
@@ -790,43 +839,44 @@ function assertBench(results, options) {
       nonSdkJsCssBytes: item.summary.nonSdkJsCssBytes,
       fixtureRequests: item.summary.fixtureRequests,
       fixtureBytes: item.summary.fixtureBytes,
-	      partialContentRequests: item.summary.partialContentRequests,
-	      missingRequests: item.requests.filter(request => request.status === 404 && !isIgnorableMissingRequest(request.url)).length,
-	      missingUrls: item.requests.filter(request => request.status === 404 && !isIgnorableMissingRequest(request.url)).slice(0, 10).map(request => request.url),
-	      ignorableMissingRequests: item.requests.filter(request => request.status === 404 && isIgnorableMissingRequest(request.url)).length,
-	      errors: item.result.errors,
-	      runtimeErrors: item.runtimeErrors,
-	      criticalRuntimeErrors: item.runtimeErrors.filter(error => !isIgnorableRuntimeError(error)),
-	      iframeSrc: item.result.iframeSrc
-	    }));
+      partialContentRequests: item.summary.partialContentRequests,
+      missingRequests: item.requests.filter(request => request.status === 404 && !isIgnorableMissingRequest(request.url)).length,
+      missingUrls: item.requests.filter(request => request.status === 404 && !isIgnorableMissingRequest(request.url)).slice(0, 10).map(request => request.url),
+      ignorableMissingRequests: item.requests.filter(request => request.status === 404 && isIgnorableMissingRequest(request.url)).length,
+      errors: item.result.errors,
+      runtimeErrors: item.runtimeErrors,
+      criticalRuntimeErrors: item.runtimeErrors.filter(error => !isIgnorableRuntimeError(error)),
+      iframeSrc: item.result.iframeSrc
+    }));
     const byName = Object.fromEntries(results.map(item => [item.scenario, item]));
     const output = {
       chrome,
       documentServer: options.documentServer || null,
       results: printable,
+      previewTimeSummary: buildPreviewTimeSummary(results),
       pdfTotalByteReductionPercent: percentReduction(
         byName['pdf-fallback'].summary.totalBytes,
         byName['pdf-native'].summary.totalBytes
       ),
-    officeJsCssByteReductionPercent: percentReduction(byName['office-full'].summary.jsCssBytes, byName['office-lite'].summary.jsCssBytes),
-    officeNonSdkJsCssByteReductionPercent: percentReduction(byName['office-full'].summary.nonSdkJsCssBytes, byName['office-lite'].summary.nonSdkJsCssBytes),
-    officeReductions: {
-      docx: {
-        nonSdkJsCssByteReductionPercent: percentReduction(byName['office-full'].summary.nonSdkJsCssBytes, byName['office-lite'].summary.nonSdkJsCssBytes),
-        nonSdkJsCssRequestReductionPercent: percentReduction(byName['office-full'].summary.nonSdkJsCssRequests, byName['office-lite'].summary.nonSdkJsCssRequests)
-      },
-      xlsx: {
-        nonSdkJsCssByteReductionPercent: percentReduction(byName['office-full-xlsx'].summary.nonSdkJsCssBytes, byName['office-lite-xlsx'].summary.nonSdkJsCssBytes),
-        nonSdkJsCssRequestReductionPercent: percentReduction(byName['office-full-xlsx'].summary.nonSdkJsCssRequests, byName['office-lite-xlsx'].summary.nonSdkJsCssRequests)
-      },
-      pptx: {
-        nonSdkJsCssByteReductionPercent: percentReduction(byName['office-full-pptx'].summary.nonSdkJsCssBytes, byName['office-lite-pptx'].summary.nonSdkJsCssBytes),
-        nonSdkJsCssRequestReductionPercent: percentReduction(byName['office-full-pptx'].summary.nonSdkJsCssRequests, byName['office-lite-pptx'].summary.nonSdkJsCssRequests)
+      officeJsCssByteReductionPercent: percentReduction(byName['office-full'].summary.jsCssBytes, byName['office-lite'].summary.jsCssBytes),
+      officeNonSdkJsCssByteReductionPercent: percentReduction(byName['office-full'].summary.nonSdkJsCssBytes, byName['office-lite'].summary.nonSdkJsCssBytes),
+      officeReductions: {
+        docx: {
+          nonSdkJsCssByteReductionPercent: percentReduction(byName['office-full'].summary.nonSdkJsCssBytes, byName['office-lite'].summary.nonSdkJsCssBytes),
+          nonSdkJsCssRequestReductionPercent: percentReduction(byName['office-full'].summary.nonSdkJsCssRequests, byName['office-lite'].summary.nonSdkJsCssRequests)
+        },
+        xlsx: {
+          nonSdkJsCssByteReductionPercent: percentReduction(byName['office-full-xlsx'].summary.nonSdkJsCssBytes, byName['office-lite-xlsx'].summary.nonSdkJsCssBytes),
+          nonSdkJsCssRequestReductionPercent: percentReduction(byName['office-full-xlsx'].summary.nonSdkJsCssRequests, byName['office-lite-xlsx'].summary.nonSdkJsCssRequests)
+        },
+        pptx: {
+          nonSdkJsCssByteReductionPercent: percentReduction(byName['office-full-pptx'].summary.nonSdkJsCssBytes, byName['office-lite-pptx'].summary.nonSdkJsCssBytes),
+          nonSdkJsCssRequestReductionPercent: percentReduction(byName['office-full-pptx'].summary.nonSdkJsCssRequests, byName['office-lite-pptx'].summary.nonSdkJsCssRequests)
+        }
       }
-    }
-  };
+    };
     console.log(JSON.stringify(output, null, 2));
-	    assertBench(results, options);
+    assertBench(results, options);
   } finally {
     await new Promise(resolve => server.close(resolve));
   }

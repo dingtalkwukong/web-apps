@@ -408,18 +408,23 @@ test('preview trace records route-relative ready timing', function() {
     var readyPayloads = result.harness.consoleInfo
         .filter(function(entry) {
             return entry[0] === '[onlyoffice-preview]' && entry[1] &&
-                (entry[1].event === 'native-pdf-ready' || entry[1].event === 'document-ready');
+                (entry[1].event === 'native-pdf-ready' || entry[1].event === 'document-ready' || entry[1].event === 'preview-complete');
         })
         .map(function(entry) {
             return entry[1];
         });
 
-    assert.strictEqual(readyPayloads.length, 2);
+    assert.strictEqual(readyPayloads.length, 3);
     readyPayloads.forEach(function(payload) {
         assert.strictEqual(typeof payload.previewElapsedMs, 'number');
-        assert.strictEqual(typeof payload.readyMs, 'number');
         assert.ok(payload.previewElapsedMs >= 0);
-        assert.ok(payload.readyMs >= 0);
+        if (payload.event === 'preview-complete') {
+            assert.strictEqual(typeof payload.totalPreviewMs, 'number');
+            assert.ok(payload.totalPreviewMs >= 0);
+        } else {
+            assert.strictEqual(typeof payload.readyMs, 'number');
+            assert.ok(payload.readyMs >= 0);
+        }
     });
 });
 

@@ -516,6 +516,10 @@
                                 previewLite: !!(_config.editorConfig && _config.editorConfig.previewLite),
                                 readyMs: getPreviewTraceElapsedMs(_config)
                             });
+                            previewCompleteTrace(_config, {
+                                previewLite: !!(_config.editorConfig && _config.editorConfig.previewLite),
+                                readyMs: getPreviewTraceElapsedMs(_config)
+                            });
                         }
 
                         if (handler && typeof handler == "function") {
@@ -638,6 +642,11 @@
                     readyMs: getPreviewTraceElapsedMs(_config)
                 });
                 previewTrace(_config, "document-ready", {
+                    src: iframe && iframe.src,
+                    nativePdf: true,
+                    readyMs: getPreviewTraceElapsedMs(_config)
+                });
+                previewCompleteTrace(_config, {
                     src: iframe && iframe.src,
                     nativePdf: true,
                     readyMs: getPreviewTraceElapsedMs(_config)
@@ -1504,6 +1513,12 @@
         if (window.console && console.info)
             console.info("[onlyoffice-preview]", payload);
         sendPreviewTrace(config, payload);
+    }
+
+    function previewCompleteTrace(config, data) {
+        data = data || {};
+        data.totalPreviewMs = getPreviewTraceElapsedMs(config);
+        previewTrace(config, "preview-complete", data);
     }
 
     function sendPreviewTrace(config, payload) {
