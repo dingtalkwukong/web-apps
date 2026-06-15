@@ -67,6 +67,19 @@ define([
 
         function _onAppReady(config) {
             var me = this;
+            if (!me._isRendered || !me.cntZoom || !me.cntZoom.cmpEl || !me.txtGoToPage) {
+                me._pendingAppReadyConfig = config;
+                me._hasPendingAppReady = true;
+                return;
+            }
+            if (me._isAppReadyApplied)
+                return;
+
+            me._isAppReadyApplied = true;
+            me._hasPendingAppReady = false;
+            me._pendingAppReadyConfig = null;
+            config = config || {};
+
             if (config.canUseSelectHandTools) {
                 me.btnSelectTool.updateHint(me.tipSelectTool);
                 me.btnHandTool.updateHint(me.tipHandTool);
@@ -309,7 +322,12 @@ define([
                 }
 
                 this.$el.html(me.$layout);
+                this._isRendered = true;
                 this.fireEvent('render:after', [this]);
+
+                if (this._hasPendingAppReady) {
+                    _onAppReady.call(this, this._pendingAppReadyConfig);
+                }
 
                 return this;
             },
