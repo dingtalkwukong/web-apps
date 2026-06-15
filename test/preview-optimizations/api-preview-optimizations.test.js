@@ -120,6 +120,8 @@ function makeHarness() {
         created: [],
         replacements: [],
         listeners: listeners,
+        consoleInfo: [],
+        previewTraceRequests: [],
         window: null,
         document: null,
         DocsAPI: null,
@@ -181,10 +183,22 @@ function makeHarness() {
         }
     };
 
+    function ImageMock() {}
+    Object.defineProperty(ImageMock.prototype, 'src', {
+        get: function() {
+            return this._src;
+        },
+        set: function(value) {
+            this._src = value;
+            harness.previewTraceRequests.push(value);
+        }
+    });
+
     var window = {
         DocsAPI: {},
         JSON: JSON,
         Object: Object,
+        Image: ImageMock,
         location: {
             origin: 'https://host.example',
             search: ''
@@ -209,11 +223,22 @@ function makeHarness() {
     };
     window.parent = window;
 
+    var testConsole = {
+        info: function() {
+            harness.consoleInfo.push(Array.prototype.slice.call(arguments));
+        },
+        log: console.log.bind(console),
+        warn: console.warn.bind(console),
+        error: console.error.bind(console)
+    };
+    window.console = testConsole;
+
     var context = {
         window: window,
         document: document,
         localStorage: localStorage,
-        console: console,
+        console: testConsole,
+        Image: ImageMock,
         JSON: JSON,
         Object: Object,
         Error: Error,
@@ -256,6 +281,31 @@ function assertNoPreviewLite(iframe) {
     assert.ok(iframe.src.indexOf('previewLite=1') < 0, 'previewLite URL marker should be absent');
 }
 
+function assertSanitizedTraceSrc(harness, expectedSrc) {
+    var payloadsWithSrc = harness.consoleInfo
+        .filter(function(entry) {
+            return entry[0] === '[onlyoffice-preview]' && entry[1] && entry[1].src;
+        })
+        .map(function(entry) {
+            return entry[1];
+        });
+    var requestSrcs = harness.previewTraceRequests
+        .map(function(url) {
+            return new URL(url, 'https://ds.example').searchParams.get('src');
+        })
+        .filter(Boolean);
+
+    assert.ok(payloadsWithSrc.length > 0, 'expected console trace payloads with src');
+    assert.ok(requestSrcs.length > 0, 'expected network trace payloads with src');
+
+    payloadsWithSrc.forEach(function(payload) {
+        assert.strictEqual(payload.src, expectedSrc);
+    });
+    requestSrcs.forEach(function(src) {
+        assert.strictEqual(src, expectedSrc);
+    });
+}
+
 test('PDF read-only non-form files use a native iframe and fire ready events on load', function() {
     var fired = [];
     var config = baseConfig({
@@ -280,6 +330,71 @@ test('PDF read-only non-form files use a native iframe and fire ready events on 
 
     result.iframe.onload();
     assert.deepStrictEqual(fired, ['onAppReady', 'onDocumentReady']);
+});
+
+test('PDF non-form files still use native iframe when business passes fillforms mode or permission', function() {
+    var scenarios = [
+        baseConfig({
+            editorConfig: {
+                mode: 'fillforms'
+            }
+        }),
+        baseConfig({
+            document: {
+                permissions: {
+                    edit: false,
+                    fillForms: true
+                }
+            }
+        }),
+        baseConfig({
+            editorConfig: {
+                mode: 'fillforms'
+            },
+            document: {
+                permissions: {
+                    edit: false,
+                    fillForms: true
+                }
+            }
+        })
+    ];
+
+    scenarios.forEach(function(config) {
+        var result = createEditor(config);
+
+        assert.strictEqual(result.iframe.src, config.document.url);
+        assert.strictEqual(result.iframe.getAttribute('data-native-pdf-preview'), 'true');
+        assert.strictEqual(result.iframe.getAttribute('data-onlyoffice-native-pdf-preview'), 'true');
+        assert.strictEqual((result.harness.listeners.message || []).length, 0);
+    });
+});
+
+test('previewTraceNetwork alone emits sanitized native PDF trace requests', function() {
+    var config = baseConfig({
+        previewTraceNetwork: true,
+        document: {
+            url: 'https://files.example/doc.pdf?token=secret#page=1'
+        }
+    });
+    var result = createEditor(config);
+
+    assert.strictEqual(result.iframe.src, config.document.url);
+    assertSanitizedTraceSrc(result.harness, 'https://files.example/doc.pdf');
+});
+
+test('previewTraceNetwork search flag enables trace without previewTrace', function() {
+    var config = baseConfig({
+        document: {
+            url: 'https://files.example/doc.pdf?signature=secret#view'
+        }
+    });
+    var harness = makeHarness();
+
+    harness.window.location.search = '?previewTraceNetwork=1';
+    new harness.DocsAPI.DocEditor('placeholder', config);
+
+    assertSanitizedTraceSrc(harness, 'https://files.example/doc.pdf');
 });
 
 test('PDF native iframe can be disabled with openPdfInBrowser=false', function() {
@@ -406,7 +521,7 @@ test('PDF openPdfAsBinary can be enabled through document.openPdfAsBinary=true',
     assert.strictEqual(messages[1].data.buffer, buffer);
 });
 
-test('PDF forms, unknown form status, fill form, review, and edit modes keep the full editor path', function() {
+test('PDF forms, unknown form status, review, and edit modes keep the full editor path', function() {
     var scenarios = [
         baseConfig({
             document: {
@@ -416,14 +531,6 @@ test('PDF forms, unknown form status, fill form, review, and edit modes keep the
         baseConfig({
             document: {
                 isForm: undefined
-            }
-        }),
-        baseConfig({
-            document: {
-                permissions: {
-                    edit: false,
-                    fillForms: true
-                }
             }
         }),
         baseConfig({

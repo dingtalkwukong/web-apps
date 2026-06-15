@@ -21,6 +21,7 @@ const fixtures = {
 
 const scenarios = [
   'pdf-native',
+  'pdf-fillforms-mode-native',
   'pdf-fallback',
   'office-lite',
   'office-full',
@@ -279,6 +280,9 @@ function makeBenchPage(scenario, docsApiUrl, options) {
     if (scenario === 'pdf-fallback') {
       doc.openPdfInBrowser = false;
     }
+    if (scenario === 'pdf-fillforms-mode-native') {
+      doc.permissions.fillForms = true;
+    }
     if (isOffice && isFull) {
       doc.openOfficePreviewLite = false;
     }
@@ -290,7 +294,7 @@ function makeBenchPage(scenario, docsApiUrl, options) {
       documentType: isOffice ? officeFixture.documentType : 'pdf',
       document: doc,
       editorConfig: {
-        mode: 'view',
+        mode: scenario === 'pdf-fillforms-mode-native' ? 'fillforms' : 'view',
         lang: 'en',
         customization: {}
       },
@@ -549,7 +553,8 @@ async function runChrome(chrome, url, waitTimeoutMs, options) {
         '--disable-gpu',
         '--disable-dev-shm-usage',
         '--disable-background-networking',
-        '--disable-extensions'
+        '--disable-extensions',
+        '--disable-features=BlockInsecurePrivateNetworkRequests,PrivateNetworkAccessRespectPreflightResults,PrivateNetworkAccessSendPreflights'
       ]
     });
     const page = await browser.newPage();
@@ -636,6 +641,7 @@ function isIgnorableMissingRequest(url) {
 function assertBench(results, options) {
   const byName = Object.fromEntries(results.map(item => [item.scenario, item]));
   const pdfNative = byName['pdf-native'];
+  const pdfFillformsModeNative = byName['pdf-fillforms-mode-native'];
   const pdfFallback = byName['pdf-fallback'];
   const officePairs = [
     ['office-lite', 'office-full'],
@@ -656,6 +662,8 @@ function assertBench(results, options) {
 
   assert.strictEqual(pdfNative.result.attrs.nativePdf, 'true', 'native PDF iframe marker missing');
   assert.ok(pdfNative.result.iframeSrc.includes('/fixtures/pdf'), 'native PDF should load the PDF URL directly');
+  assert.strictEqual(pdfFillformsModeNative.result.attrs.nativePdf, 'true', 'fillforms-mode native PDF iframe marker missing');
+  assert.ok(pdfFillformsModeNative.result.iframeSrc.includes('/fixtures/pdf'), 'fillforms-mode native PDF should load the PDF URL directly');
   assert.notStrictEqual(pdfFallback.result.attrs.nativePdf, 'true', 'PDF fallback must not use native iframe');
   assert.ok(/\/(?:web-apps\/)?apps\/pdfeditor\/main\/index\.html/.test(pdfFallback.result.iframeSrc), 'PDF fallback should load the PDF editor');
   for (const [liteName, fullName] of officePairs) {
@@ -735,7 +743,10 @@ function assertBench(results, options) {
       chrome,
       documentServer: options.documentServer || null,
       results: printable,
-      pdfTotalByteReductionPercent: percentReduction(results[1].summary.totalBytes, results[0].summary.totalBytes),
+      pdfTotalByteReductionPercent: percentReduction(
+        byName['pdf-fallback'].summary.totalBytes,
+        byName['pdf-native'].summary.totalBytes
+      ),
     officeJsCssByteReductionPercent: percentReduction(byName['office-full'].summary.jsCssBytes, byName['office-lite'].summary.jsCssBytes),
     officeNonSdkJsCssByteReductionPercent: percentReduction(byName['office-full'].summary.nonSdkJsCssBytes, byName['office-lite'].summary.nonSdkJsCssBytes),
     officeReductions: {

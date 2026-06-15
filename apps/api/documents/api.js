@@ -615,7 +615,16 @@
             }
 
             useNativePdfPreview = shouldUseNativePdfPreview(_config);
+            previewTrace(_config, "route-decision", {
+                nativePdf: useNativePdfPreview,
+                previewLite: !!(_config.editorConfig && _config.editorConfig.previewLite),
+                openPdfInBrowser: getConfigFlag(_config, 'openPdfInBrowser'),
+                openPdfAsBinary: getConfigFlag(_config, 'openPdfAsBinary')
+            });
             iframe = useNativePdfPreview ? createNativePdfPreviewIframe(_config, function() {
+                previewTrace(_config, "native-pdf-ready", {
+                    src: iframe && iframe.src
+                });
                 _fireEvent('onAppReady');
                 _fireEvent('onDocumentReady');
             }) : createIframe(_config);
@@ -1338,6 +1347,11 @@
         var iframe = document.createElement("iframe");
 
         iframe.src = getAppPath(config) + getAppParameters(config);
+        previewTrace(config, "iframe-create", {
+            src: iframe.src,
+            nativePdf: false,
+            previewLite: !!(config.editorConfig && config.editorConfig.previewLite)
+        });
         if (config.editorConfig && config.editorConfig.previewLite) {
             iframe.setAttribute("data-office-preview-lite", "true");
             iframe.setAttribute("data-onlyoffice-preview-lite", "true");
@@ -1350,6 +1364,10 @@
         var iframe = document.createElement("iframe");
 
         iframe.src = config.document.url;
+        previewTrace(config, "native-pdf-iframe-create", {
+            src: iframe.src,
+            nativePdf: true
+        });
         iframe.setAttribute("data-native-pdf-preview", "true");
         iframe.setAttribute("data-onlyoffice-native-pdf-preview", "true");
         iframe.onload = onLoad;
@@ -1368,6 +1386,7 @@
         iframe.setAttribute("allowfullscreen",""); // for IE11
         iframe.setAttribute("onmousewheel",""); // for Safari on Mac
         iframe.setAttribute("allow", "autoplay; camera; microphone; display-capture; clipboard-write;");
+        traceIframeLoad(iframe, config);
 
 		if (config.type == "mobile")
 		{
@@ -1387,6 +1406,107 @@
         if (customization && customization[name] !== undefined)
             return customization[name];
         return undefined;
+    }
+
+    function getPreviewTraceSearchFlag(name) {
+        var search = window.location && window.location.search || "";
+        return new RegExp("(?:^|[?&])" + name + "=1(?:&|$)").test(search);
+    }
+
+    function getPreviewTraceStorageFlag(name) {
+        try {
+            return window.localStorage && window.localStorage.getItem(name) === "1";
+        } catch (error) {
+            return false;
+        }
+    }
+
+    function isPreviewTraceEnabled(config) {
+        return getConfigFlag(config, 'previewTrace') === true ||
+               isPreviewTraceNetworkEnabled(config) ||
+               getPreviewTraceSearchFlag("previewTrace") ||
+               getPreviewTraceStorageFlag("onlyofficePreviewTrace");
+    }
+
+    function isPreviewTraceNetworkEnabled(config) {
+        return getConfigFlag(config, 'previewTraceNetwork') === true ||
+               getPreviewTraceSearchFlag("previewTraceNetwork") ||
+               getPreviewTraceStorageFlag("onlyofficePreviewTraceNetwork");
+    }
+
+    function sanitizePreviewTraceUrl(value) {
+        if (typeof value !== 'string')
+            return value;
+
+        return value.replace(/[?#].*$/, '');
+    }
+
+    function sanitizePreviewTraceValue(prop, value) {
+        return /(?:src|url)$/i.test(prop) ? sanitizePreviewTraceUrl(value) : value;
+    }
+
+    function previewTrace(config, event, data) {
+        var doc, editorConfig, payload, prop;
+
+        if (!isPreviewTraceEnabled(config))
+            return;
+
+        doc = config && config.document || {};
+        editorConfig = config && config.editorConfig || {};
+        payload = {
+            event: event,
+            elapsedMs: window.performance && performance.now ? Math.round(performance.now()) : null,
+            fileType: doc.fileType,
+            documentType: config && config.documentType,
+            mode: editorConfig.mode,
+            isForm: doc.isForm
+        };
+        data = data || {};
+
+        for (prop in data) {
+            if (data.hasOwnProperty(prop))
+                payload[prop] = sanitizePreviewTraceValue(prop, data[prop]);
+        }
+
+        if (window.console && console.info)
+            console.info("[onlyoffice-preview]", payload);
+        sendPreviewTrace(config, payload);
+    }
+
+    function sendPreviewTrace(config, payload) {
+        var params = [],
+            prop,
+            image;
+
+        if (!isPreviewTraceNetworkEnabled(config))
+            return;
+
+        try {
+            for (prop in payload) {
+                if (payload.hasOwnProperty(prop) && payload[prop] !== undefined && payload[prop] !== null)
+                    params.push(encodeURIComponent(prop) + "=" + encodeURIComponent(String(payload[prop])));
+            }
+            params.push("cache=" + (new Date()).getTime());
+            image = new Image();
+            image.src = "/onlyoffice/preview-trace.gif?" + params.join("&");
+        } catch (error) {}
+    }
+
+    function traceIframeLoad(iframe, config) {
+        var startedAt;
+
+        if (!isPreviewTraceEnabled(config))
+            return;
+
+        startedAt = window.performance && performance.now ? performance.now() : (new Date()).getTime();
+        if (iframe.addEventListener) {
+            iframe.addEventListener("load", function() {
+                previewTrace(config, "iframe-load", {
+                    src: iframe.src,
+                    iframeLoadMs: Math.round((window.performance && performance.now ? performance.now() : (new Date()).getTime()) - startedAt)
+                });
+            }, false);
+        }
     }
 
     function isPdfFile(config) {
@@ -1417,6 +1537,16 @@
                editorConfig.canRequestEditRights === true;
     }
 
+    function hasPdfEditOrReviewMode(config) {
+        var permissions = config.document && config.document.permissions || {},
+            editorConfig = config.editorConfig || {};
+
+        return editorConfig.mode && editorConfig.mode !== 'view' && editorConfig.mode !== 'fillforms' ||
+               permissions.review === true ||
+               permissions.comment === true ||
+               editorConfig.canRequestEditRights === true;
+    }
+
     function shouldOpenPdfAsBinary(config) {
         return isPdfFile(config) &&
                getConfigFlag(config, 'openPdfAsBinary') === true &&
@@ -1431,7 +1561,7 @@
                getConfigFlag(config, 'openPdfAsBinary') !== true &&
                config.document && config.document.isForm === false &&
                isViewOnlyMode(config) &&
-               !hasEditOrReviewMode(config);
+               !hasPdfEditOrReviewMode(config);
     }
 
     function shouldUseOfficePreviewLite(config) {
