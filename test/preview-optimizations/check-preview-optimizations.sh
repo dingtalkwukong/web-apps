@@ -3,6 +3,8 @@ set -eu
 
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 API="$ROOT/apps/api/documents/api.js"
+BROWSER_BENCH="$ROOT/test/preview-optimizations/browser-preview-bench.js"
+REAL_PREVIEW_TEST="$ROOT/test/preview-optimizations/real-preview-test.js"
 
 fail() {
     echo "preview optimization check failed: $1" >&2
@@ -12,13 +14,13 @@ fail() {
 assert_contains() {
     file=$1
     pattern=$2
-    grep -F "$pattern" "$file" >/dev/null || fail "$file does not contain: $pattern"
+    grep -F -- "$pattern" "$file" >/dev/null || fail "$file does not contain: $pattern"
 }
 
 assert_matches() {
     file=$1
     pattern=$2
-    grep -E "$pattern" "$file" >/dev/null || fail "$file does not match: $pattern"
+    grep -E -- "$pattern" "$file" >/dev/null || fail "$file does not match: $pattern"
 }
 
 lite_block() {
@@ -92,13 +94,15 @@ assert_contains "$API" "function shouldUseNativePdfPreview(config)"
 assert_contains "$API" "config.document && config.document[name] !== undefined"
 assert_contains "$API" "getConfigFlag(config, 'openPdfInBrowser') !== false"
 assert_contains "$API" "getConfigFlag(config, 'openPdfAsBinary') !== true"
-assert_contains "$API" "config.document && config.document.isForm === false"
+assert_contains "$API" "config.document && config.document.isForm !== true"
 assert_contains "$API" "isViewOnlyMode(config)"
 assert_contains "$API" "function hasPdfEditOrReviewMode(config)"
 assert_contains "$API" "editorConfig.mode !== 'fillforms'"
 assert_contains "$API" "!hasPdfEditOrReviewMode(config)"
 assert_contains "$API" "function sanitizePreviewTraceUrl(value)"
+assert_contains "$API" "function getPreviewTraceElapsedMs(config)"
 assert_contains "$API" "payload[prop] = sanitizePreviewTraceValue(prop, data[prop]);"
+assert_contains "$API" "previewElapsedMs: getPreviewTraceElapsedMs(config)"
 assert_contains "$API" "isPreviewTraceNetworkEnabled(config)"
 assert_contains "$API" "iframe.src = config.document.url;"
 assert_contains "$API" "iframe.setAttribute(\"data-native-pdf-preview\", \"true\");"
@@ -107,6 +111,18 @@ assert_contains "$API" "_fireEvent('onAppReady');"
 assert_contains "$API" "_fireEvent('onDocumentReady');"
 assert_contains "$API" "if (!useNativePdfPreview && _config.document && (_config.document.isForm!==true && _config.document.isForm!==false))"
 assert_contains "$API" "params += \"&mode=view\";"
+assert_contains "$BROWSER_BENCH" "'pdf-unknown-form-native'"
+assert_contains "$BROWSER_BENCH" "'pdf-large-native'"
+assert_contains "$BROWSER_BENCH" "const LARGE_PDF_BYTES = 19 * 1024 * 1024;"
+assert_contains "$BROWSER_BENCH" "delete doc.isForm;"
+assert_contains "$BROWSER_BENCH" "large native PDF should load the large PDF URL directly"
+assert_contains "$REAL_PREVIEW_TEST" "const TEST_NAME = '真实预览测试';"
+assert_contains "$REAL_PREVIEW_TEST" "showSensitive: false"
+assert_contains "$REAL_PREVIEW_TEST" "--show-sensitive"
+assert_contains "$REAL_PREVIEW_TEST" "function sanitizeUrlForReport(value)"
+assert_contains "$REAL_PREVIEW_TEST" "return '/document-url';"
+assert_contains "$REAL_PREVIEW_TEST" "'PDF must not open full editor path'"
+assert_contains "$REAL_PREVIEW_TEST" "'PDF must not use fillforms mode'"
 
 # PDF binary open path.
 assert_contains "$API" "function shouldOpenPdfAsBinary(config)"

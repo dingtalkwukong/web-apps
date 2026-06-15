@@ -18,10 +18,13 @@ const fixtures = {
   xlsx: path.join(repoRoot, 'sdkjs/cell/documentation/Keyboard shortcuts.xlsx'),
   pptx: path.join(repoRoot, 'sdkjs/slide/themes/src/01_blank.pptx')
 };
+const LARGE_PDF_BYTES = 19 * 1024 * 1024;
 
 const scenarios = [
   'pdf-native',
+  'pdf-unknown-form-native',
   'pdf-fillforms-mode-native',
+  'pdf-large-native',
   'pdf-fallback',
   'office-lite',
   'office-full',
@@ -168,6 +171,17 @@ function parseRange(header, totalLength) {
   return {start, end, contentLength: end - start + 1};
 }
 
+function makeLargePdfBuffer() {
+  const base = fs.readFileSync(fixtures.pdf);
+  if (base.length >= LARGE_PDF_BYTES) {
+    return base;
+  }
+
+  const buffer = Buffer.alloc(LARGE_PDF_BYTES, 0x20);
+  base.copy(buffer, 0);
+  return buffer;
+}
+
 function safeJoin(root, requestPath) {
   const decodedPath = decodeURIComponent(requestPath);
   const fullPath = path.resolve(root, decodedPath.replace(/^\/+/, ''));
@@ -269,14 +283,17 @@ function makeBenchPage(scenario, docsApiUrl, options) {
       title: officeFixture.title,
       permissions: {edit: false}
     } : {
-      url: makeUrl('pdf'),
+      url: makeUrl(scenario === 'pdf-large-native' ? 'pdf-large' : 'pdf'),
       fileType: 'pdf',
       key: 'bench-pdf-' + scenario,
-      title: 'zlib.3.pdf',
+      title: scenario === 'pdf-large-native' ? 'large.pdf' : 'zlib.3.pdf',
       isForm: false,
       permissions: {edit: false}
     };
 
+    if (scenario === 'pdf-unknown-form-native' || scenario === 'pdf-large-native') {
+      delete doc.isForm;
+    }
     if (scenario === 'pdf-fallback') {
       doc.openPdfInBrowser = false;
     }
@@ -333,6 +350,8 @@ function startServer(options) {
   const metrics = {
     requests: []
   };
+  const largePdf = makeLargePdfBuffer();
+
   function serveInline(req, res, body, type, kind) {
     const bytes = Buffer.byteLength(body);
     metrics.requests.push({url: req.url, status: 200, bytes, kind});
@@ -342,6 +361,37 @@ function startServer(options) {
       'Cache-Control': 'no-store'
     });
     res.end(body);
+  }
+
+  function serveBuffer(req, res, buffer, type, kind) {
+    const range = parseRange(req.headers.range, buffer.length);
+    if (range && range.invalid) {
+      metrics.requests.push({url: req.url, status: 416, bytes: 0, kind: 'range'});
+      res.writeHead(416, {
+        'Accept-Ranges': 'bytes',
+        'Content-Range': 'bytes */' + buffer.length
+      });
+      res.end();
+      return;
+    }
+
+    const status = range ? 206 : 200;
+    const start = range ? range.start : 0;
+    const end = range ? range.end + 1 : buffer.length;
+    const bytes = end - start;
+    const headers = {
+      'Accept-Ranges': 'bytes',
+      'Content-Type': type,
+      'Content-Length': bytes,
+      'Cache-Control': 'no-store'
+    };
+    if (range) {
+      headers['Content-Range'] = 'bytes ' + range.start + '-' + range.end + '/' + buffer.length;
+    }
+
+    metrics.requests.push({url: req.url, status, bytes, kind});
+    res.writeHead(status, headers);
+    res.end(buffer.subarray(start, end));
   }
 
   const server = http.createServer((req, res) => {
@@ -373,6 +423,11 @@ function startServer(options) {
     }
 
     let filePath = null;
+    if (pathname === '/fixtures/pdf-large') {
+      serveBuffer(req, res, largePdf, 'application/pdf', '.pdf');
+      return;
+    }
+
     if (pathname === '/fixtures/pdf') filePath = fixtures.pdf;
     else if (pathname === '/fixtures/docx') filePath = fixtures.docx;
     else if (pathname === '/fixtures/xlsx') filePath = fixtures.xlsx;
@@ -641,7 +696,9 @@ function isIgnorableMissingRequest(url) {
 function assertBench(results, options) {
   const byName = Object.fromEntries(results.map(item => [item.scenario, item]));
   const pdfNative = byName['pdf-native'];
+  const pdfUnknownFormNative = byName['pdf-unknown-form-native'];
   const pdfFillformsModeNative = byName['pdf-fillforms-mode-native'];
+  const pdfLargeNative = byName['pdf-large-native'];
   const pdfFallback = byName['pdf-fallback'];
   const officePairs = [
     ['office-lite', 'office-full'],
@@ -662,8 +719,12 @@ function assertBench(results, options) {
 
   assert.strictEqual(pdfNative.result.attrs.nativePdf, 'true', 'native PDF iframe marker missing');
   assert.ok(pdfNative.result.iframeSrc.includes('/fixtures/pdf'), 'native PDF should load the PDF URL directly');
+  assert.strictEqual(pdfUnknownFormNative.result.attrs.nativePdf, 'true', 'unknown-form native PDF iframe marker missing');
+  assert.ok(pdfUnknownFormNative.result.iframeSrc.includes('/fixtures/pdf'), 'unknown-form native PDF should load the PDF URL directly');
   assert.strictEqual(pdfFillformsModeNative.result.attrs.nativePdf, 'true', 'fillforms-mode native PDF iframe marker missing');
   assert.ok(pdfFillformsModeNative.result.iframeSrc.includes('/fixtures/pdf'), 'fillforms-mode native PDF should load the PDF URL directly');
+  assert.strictEqual(pdfLargeNative.result.attrs.nativePdf, 'true', 'large native PDF iframe marker missing');
+  assert.ok(pdfLargeNative.result.iframeSrc.includes('/fixtures/pdf-large'), 'large native PDF should load the large PDF URL directly');
   assert.notStrictEqual(pdfFallback.result.attrs.nativePdf, 'true', 'PDF fallback must not use native iframe');
   assert.ok(/\/(?:web-apps\/)?apps\/pdfeditor\/main\/index\.html/.test(pdfFallback.result.iframeSrc), 'PDF fallback should load the PDF editor');
   for (const [liteName, fullName] of officePairs) {

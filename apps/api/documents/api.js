@@ -505,7 +505,17 @@
                         }
                     } else {
                         if (msg.event === 'onAppReady') {
+                            previewTrace(_config, "app-ready", {
+                                previewLite: !!(_config.editorConfig && _config.editorConfig.previewLite),
+                                readyMs: getPreviewTraceElapsedMs(_config)
+                            });
                             _onAppReady();
+                        }
+                        if (msg.event === 'onDocumentReady') {
+                            previewTrace(_config, "document-ready", {
+                                previewLite: !!(_config.editorConfig && _config.editorConfig.previewLite),
+                                readyMs: getPreviewTraceElapsedMs(_config)
+                            });
                         }
 
                         if (handler && typeof handler == "function") {
@@ -610,6 +620,7 @@
         getShardkey(_config);
 
         if (target && _checkConfigParams()) {
+            markPreviewTraceStart(_config);
             if (shouldUseOfficePreviewLite(_config)) {
                 _config.editorConfig.previewLite = true;
             }
@@ -623,7 +634,13 @@
             });
             iframe = useNativePdfPreview ? createNativePdfPreviewIframe(_config, function() {
                 previewTrace(_config, "native-pdf-ready", {
-                    src: iframe && iframe.src
+                    src: iframe && iframe.src,
+                    readyMs: getPreviewTraceElapsedMs(_config)
+                });
+                previewTrace(_config, "document-ready", {
+                    src: iframe && iframe.src,
+                    nativePdf: true,
+                    readyMs: getPreviewTraceElapsedMs(_config)
                 });
                 _fireEvent('onAppReady');
                 _fireEvent('onDocumentReady');
@@ -1211,7 +1228,7 @@
             if (corrected_type === 'embedded')
                 appType = fillForms && isForm===undefined ? 'common' : 'word';
             else if (corrected_type !== 'mobile')
-                appType = isForm===undefined ? 'common' : isForm ? 'word' : 'pdf';
+                appType = isForm===true ? 'word' : 'pdf';
         } else if (type && typeof type[5] === 'string') { // oform|docxf
             appType = 'word';
         } else {
@@ -1292,13 +1309,13 @@
         if (!(isPdf || oldForm) && (config.editorConfig && config.editorConfig.mode == 'view' ||
             config.document && config.document.permissions && (config.document.permissions.edit === false && !config.document.permissions.review )))
             params += "&mode=view";
-        if (isPdf && config.document && config.document.isForm === false && isViewOnlyMode(config) && !hasEditOrReviewMode(config))
+        if (isPdf && config.document && config.document.isForm !== true && isViewOnlyMode(config) && !hasEditOrReviewMode(config))
             params += "&mode=view";
         else if ((isPdf || oldForm) && (config.document && config.document.permissions && config.document.permissions.edit === false || config.editorConfig && config.editorConfig.mode == 'view'))
             params += "&mode=fillforms";
 
         if (config.document) {
-            config.document.isForm = isPdf ? config.document.isForm : !!oldForm;
+            config.document.isForm = isPdf ? config.document.isForm === true : !!oldForm;
             (config.document.isForm===true || config.document.isForm===false) && (params += "&isForm=" + config.document.isForm);
         }
 
@@ -1421,6 +1438,21 @@
         }
     }
 
+    function getPreviewTraceNow() {
+        return window.performance && performance.now ? performance.now() : (new Date()).getTime();
+    }
+
+    function markPreviewTraceStart(config) {
+        if (config)
+            config.__onlyofficePreviewStartedAt = getPreviewTraceNow();
+    }
+
+    function getPreviewTraceElapsedMs(config) {
+        var startedAt = config && config.__onlyofficePreviewStartedAt;
+
+        return typeof startedAt === 'number' ? Math.round(getPreviewTraceNow() - startedAt) : null;
+    }
+
     function isPreviewTraceEnabled(config) {
         return getConfigFlag(config, 'previewTrace') === true ||
                isPreviewTraceNetworkEnabled(config) ||
@@ -1456,6 +1488,7 @@
         payload = {
             event: event,
             elapsedMs: window.performance && performance.now ? Math.round(performance.now()) : null,
+            previewElapsedMs: getPreviewTraceElapsedMs(config),
             fileType: doc.fileType,
             documentType: config && config.documentType,
             mode: editorConfig.mode,
@@ -1550,7 +1583,7 @@
     function shouldOpenPdfAsBinary(config) {
         return isPdfFile(config) &&
                getConfigFlag(config, 'openPdfAsBinary') === true &&
-               config.document && config.document.isForm === false &&
+               config.document && config.document.isForm !== true &&
                isViewOnlyMode(config) &&
                !hasEditOrReviewMode(config);
     }
@@ -1559,7 +1592,7 @@
         return isPdfFile(config) &&
                getConfigFlag(config, 'openPdfInBrowser') !== false &&
                getConfigFlag(config, 'openPdfAsBinary') !== true &&
-               config.document && config.document.isForm === false &&
+               config.document && config.document.isForm !== true &&
                isViewOnlyMode(config) &&
                !hasPdfEditOrReviewMode(config);
     }

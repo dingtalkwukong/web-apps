@@ -281,6 +281,12 @@ function assertNoPreviewLite(iframe) {
     assert.ok(iframe.src.indexOf('previewLite=1') < 0, 'previewLite URL marker should be absent');
 }
 
+function assertNativePdf(iframe, sourceUrl) {
+    assert.strictEqual(iframe.src, sourceUrl);
+    assert.strictEqual(iframe.getAttribute('data-native-pdf-preview'), 'true');
+    assert.strictEqual(iframe.getAttribute('data-onlyoffice-native-pdf-preview'), 'true');
+}
+
 function assertSanitizedTraceSrc(harness, expectedSrc) {
     var payloadsWithSrc = harness.consoleInfo
         .filter(function(entry) {
@@ -322,9 +328,7 @@ test('PDF read-only non-form files use a native iframe and fire ready events on 
     });
     var result = createEditor(config);
 
-    assert.strictEqual(result.iframe.src, config.document.url);
-    assert.strictEqual(result.iframe.getAttribute('data-native-pdf-preview'), 'true');
-    assert.strictEqual(result.iframe.getAttribute('data-onlyoffice-native-pdf-preview'), 'true');
+    assertNativePdf(result.iframe, config.document.url);
     assert.strictEqual((result.harness.listeners.message || []).length, 0);
     assert.deepStrictEqual(result.iframe.contentWindow.messages, []);
 
@@ -363,9 +367,7 @@ test('PDF non-form files still use native iframe when business passes fillforms 
     scenarios.forEach(function(config) {
         var result = createEditor(config);
 
-        assert.strictEqual(result.iframe.src, config.document.url);
-        assert.strictEqual(result.iframe.getAttribute('data-native-pdf-preview'), 'true');
-        assert.strictEqual(result.iframe.getAttribute('data-onlyoffice-native-pdf-preview'), 'true');
+        assertNativePdf(result.iframe, config.document.url);
         assert.strictEqual((result.harness.listeners.message || []).length, 0);
     });
 });
@@ -374,7 +376,7 @@ test('previewTraceNetwork alone emits sanitized native PDF trace requests', func
     var config = baseConfig({
         previewTraceNetwork: true,
         document: {
-            url: 'https://files.example/doc.pdf?token=secret#page=1'
+            url: 'https://files.example/doc.pdf?cache=placeholder#page=1'
         }
     });
     var result = createEditor(config);
@@ -386,7 +388,7 @@ test('previewTraceNetwork alone emits sanitized native PDF trace requests', func
 test('previewTraceNetwork search flag enables trace without previewTrace', function() {
     var config = baseConfig({
         document: {
-            url: 'https://files.example/doc.pdf?signature=secret#view'
+            url: 'https://files.example/doc.pdf?signature=placeholder#view'
         }
     });
     var harness = makeHarness();
@@ -395,6 +397,30 @@ test('previewTraceNetwork search flag enables trace without previewTrace', funct
     new harness.DocsAPI.DocEditor('placeholder', config);
 
     assertSanitizedTraceSrc(harness, 'https://files.example/doc.pdf');
+});
+
+test('preview trace records route-relative ready timing', function() {
+    var config = baseConfig({previewTraceNetwork: true});
+    var result = createEditor(config);
+
+    result.iframe.onload();
+
+    var readyPayloads = result.harness.consoleInfo
+        .filter(function(entry) {
+            return entry[0] === '[onlyoffice-preview]' && entry[1] &&
+                (entry[1].event === 'native-pdf-ready' || entry[1].event === 'document-ready');
+        })
+        .map(function(entry) {
+            return entry[1];
+        });
+
+    assert.strictEqual(readyPayloads.length, 2);
+    readyPayloads.forEach(function(payload) {
+        assert.strictEqual(typeof payload.previewElapsedMs, 'number');
+        assert.strictEqual(typeof payload.readyMs, 'number');
+        assert.ok(payload.previewElapsedMs >= 0);
+        assert.ok(payload.readyMs >= 0);
+    });
 });
 
 test('PDF native iframe can be disabled with openPdfInBrowser=false', function() {
@@ -521,16 +547,11 @@ test('PDF openPdfAsBinary can be enabled through document.openPdfAsBinary=true',
     assert.strictEqual(messages[1].data.buffer, buffer);
 });
 
-test('PDF forms, unknown form status, review, and edit modes keep the full editor path', function() {
+test('PDF forms, review, and edit modes keep the full editor path', function() {
     var scenarios = [
         baseConfig({
             document: {
                 isForm: true
-            }
-        }),
-        baseConfig({
-            document: {
-                isForm: undefined
             }
         }),
         baseConfig({
@@ -559,7 +580,7 @@ test('PDF forms, unknown form status, review, and edit modes keep the full edito
     });
 });
 
-test('PDF with unknown form status still sends checkParams from the full chain', function() {
+test('PDF with unknown form status uses native preview and skips checkParams', function() {
     var config = baseConfig({
         document: {
             isForm: undefined
@@ -567,17 +588,10 @@ test('PDF with unknown form status still sends checkParams from the full chain',
     });
     var result = createEditor(config);
 
-    assertNoNativePdf(result.iframe, config.document.url);
-    assert.match(result.iframe.src, /\/common\/index\.html/);
-    assert.strictEqual(typeof result.iframe.onload, 'function');
-
+    assertNativePdf(result.iframe, config.document.url);
+    assert.strictEqual((result.harness.listeners.message || []).length, 0);
     result.iframe.onload();
-    var message = parseMessage(result.iframe.contentWindow.messages[0]);
-    assert.strictEqual(message.command, 'checkParams');
-    assert.deepStrictEqual(message.data, {
-        url: config.document.url,
-        key: config.document.key
-    });
+    assert.deepStrictEqual(result.iframe.contentWindow.messages, []);
 });
 
 test('Office DOCX, XLSX, and PPTX read-only previews use previewLite', function() {
