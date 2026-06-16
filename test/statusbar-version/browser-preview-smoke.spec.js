@@ -8,12 +8,13 @@ const {test, expect} = require('playwright/test');
 const repoRoot = path.resolve(__dirname, '../../..');
 
 const fixtures = {
+  docx: path.join(repoRoot, 'server/DocService/public/healthcheck.docx'),
   pdf: path.join(repoRoot, 'core/OfficeUtils/src/zlib-1.2.11/zlib.3.pdf'),
   xlsx: path.join(repoRoot, 'sdkjs/cell/documentation/Keyboard shortcuts.xlsx')
 };
 
 const documentServer = (process.env.DOCUMENT_SERVER_URL || '').replace(/\/+$/, '');
-const requestedScenarios = (process.env.PREVIEW_SCENARIOS || 'pdf,xlsx')
+const requestedScenarios = (process.env.PREVIEW_SCENARIOS || 'pdf,docx,xlsx')
   .split(',')
   .map(item => item.trim())
   .filter(Boolean);
@@ -34,6 +35,7 @@ function contentType(filePath) {
   const ext = path.extname(filePath).toLowerCase();
   return {
     '.html': 'text/html; charset=utf-8',
+    '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     '.js': 'application/javascript; charset=utf-8',
     '.json': 'application/json; charset=utf-8',
     '.pdf': 'application/pdf',
@@ -47,23 +49,38 @@ function makePreviewPage(scenario, port) {
   const publicFixtureBaseUrl = fixtureBaseUrl || (fixtureHostname ? `http://${fixtureHostname}:${port}` : localOrigin);
   const docUrl = `${publicFixtureBaseUrl}/fixtures/${scenario}`;
   const callbackUrl = `${publicFixtureBaseUrl}/callback`;
-  const isPdf = scenario === 'pdf';
-  const doc = isPdf ? {
-    url: docUrl,
-    fileType: 'pdf',
-    key: `statusbar-smoke-pdf-${Date.now()}`,
-    title: 'zlib.3.pdf',
-    isForm: false,
-    openPdfInBrowser: false,
-    permissions: {edit: false}
-  } : {
-    url: docUrl,
-    fileType: 'xlsx',
-    key: `statusbar-smoke-xlsx-${Date.now()}`,
-    title: 'Keyboard shortcuts.xlsx',
-    openOfficePreviewLite: false,
-    permissions: {edit: false}
+  const documentTypes = {
+    docx: 'word',
+    pdf: 'pdf',
+    xlsx: 'cell'
   };
+  const documents = {
+    docx: {
+      url: docUrl,
+      fileType: 'docx',
+      key: `statusbar-smoke-docx-${Date.now()}`,
+      title: 'healthcheck.docx',
+      permissions: {edit: false}
+    },
+    pdf: {
+      url: docUrl,
+      fileType: 'pdf',
+      key: `statusbar-smoke-pdf-${Date.now()}`,
+      title: 'zlib.3.pdf',
+      isForm: false,
+      openPdfInBrowser: false,
+      permissions: {edit: false}
+    },
+    xlsx: {
+      url: docUrl,
+      fileType: 'xlsx',
+      key: `statusbar-smoke-xlsx-${Date.now()}`,
+      title: 'Keyboard shortcuts.xlsx',
+      openOfficePreviewLite: false,
+      permissions: {edit: false}
+    }
+  };
+  const doc = documents[scenario];
 
   return `<!doctype html>
 <html>
@@ -85,7 +102,7 @@ function makePreviewPage(scenario, port) {
         width: '100%',
         height: '100%',
         isLocalFile: true,
-        documentType: ${JSON.stringify(isPdf ? 'pdf' : 'cell')},
+        documentType: ${JSON.stringify(documentTypes[scenario])},
         document: ${JSON.stringify(doc)},
         editorConfig: {
           mode: 'view',
@@ -140,7 +157,9 @@ function startServer() {
       return;
     }
 
-    if (parsed.pathname === '/fixtures/pdf') {
+    if (parsed.pathname === '/fixtures/docx') {
+      filePath = fixtures.docx;
+    } else if (parsed.pathname === '/fixtures/pdf') {
       filePath = fixtures.pdf;
     } else if (parsed.pathname === '/fixtures/xlsx') {
       filePath = fixtures.xlsx;
