@@ -112,10 +112,11 @@ function createElement(tagName, harness) {
     return element;
 }
 
-function makeHarness() {
+function makeHarness(options) {
     var listeners = {};
     var elements = {};
     var storage = {};
+    var scriptSrc = options && options.scriptSrc || 'https://ds.example/web-apps/apps/api/documents/api.js';
     var harness = {
         created: [],
         replacements: [],
@@ -156,7 +157,7 @@ function makeHarness() {
             style: {}
         },
         currentScript: {
-            src: 'https://ds.example/web-apps/apps/api/documents/api.js'
+            src: scriptSrc
         },
         createElement: function(tagName) {
             return createElement(tagName, harness);
@@ -166,7 +167,7 @@ function makeHarness() {
         },
         getElementsByTagName: function(tagName) {
             if (tagName.toLowerCase() === 'script')
-                return [{src: 'https://ds.example/web-apps/apps/api/documents/api.js'}];
+                return [{src: scriptSrc}];
             return [];
         }
     };
@@ -269,6 +270,12 @@ function parseMessage(entry) {
     return typeof entry.payload === 'string' ? JSON.parse(entry.payload) : entry.payload;
 }
 
+function flushPromises() {
+    return new Promise(function(resolve) {
+        setTimeout(resolve, 0);
+    });
+}
+
 function assertNoNativePdf(iframe, sourceUrl) {
     assert.notStrictEqual(iframe.getAttribute('data-native-pdf-preview'), 'true');
     assert.notStrictEqual(iframe.getAttribute('data-onlyoffice-native-pdf-preview'), 'true');
@@ -334,6 +341,90 @@ test('PDF read-only non-form files use a native iframe and fire ready events on 
 
     result.iframe.onload();
     assert.deepStrictEqual(fired, ['onAppReady', 'onDocumentReady']);
+});
+
+test('PDF native iframe registers and uses a stable cache URL when fetch is available', async function() {
+    var fetchCalls = [],
+        cacheUrl = 'https://ds.example/downloadfile-cache/' + 'a'.repeat(64) + '.pdf?cacheToken=token',
+        config = baseConfig({
+            token: 'top-level-token',
+            document: {
+                url: 'https://ds.example/downloadfile/doc?url=https%3A%2F%2Ffiles.example%2Fdoc.pdf%3FExpires%3D1%26Signature%3Done&fileType=pdf',
+                token: 'document-token'
+            }
+        }),
+        harness = makeHarness();
+
+    harness.window.fetch = function(url, options) {
+        fetchCalls.push({url: url, options: options});
+        return Promise.resolve({
+            ok: true,
+            json: function() {
+                return Promise.resolve({url: cacheUrl});
+            }
+        });
+    };
+
+    new harness.DocsAPI.DocEditor('placeholder', config);
+    var iframe = harness.getIframe();
+
+    assert.strictEqual(fetchCalls.length, 1);
+    assert.strictEqual(fetchCalls[0].url, 'https://ds.example/downloadfile-cache/register/doc-key');
+    assert.strictEqual(fetchCalls[0].options.method, 'POST');
+    assert.strictEqual(fetchCalls[0].options.credentials, 'include');
+    assert.strictEqual(fetchCalls[0].options.headers['Content-Type'], 'application/json');
+    assert.deepStrictEqual(JSON.parse(fetchCalls[0].options.body), {
+        documentUrl: config.document.url,
+        fileType: 'pdf',
+        token: 'top-level-token'
+    });
+    assert.strictEqual(iframe.src, '');
+
+    await flushPromises();
+
+    assert.strictEqual(iframe.src, cacheUrl);
+    assert.strictEqual(iframe.getAttribute('data-native-pdf-preview'), 'true');
+    assert.strictEqual(iframe.getAttribute('data-onlyoffice-native-pdf-preview'), 'true');
+});
+
+test('PDF native cache registration uses the document server root behind versioned API paths', async function() {
+    var fetchCalls = [],
+        config = baseConfig(),
+        harness = makeHarness({
+            scriptSrc: 'https://ds.example/9.4.0-7a75a6bfab83b7e272da8a89af6c78e0/web-apps/apps/api/documents/api.js'
+        });
+
+    harness.window.fetch = function(url) {
+        fetchCalls.push(url);
+        return Promise.resolve({
+            ok: true,
+            json: function() {
+                return Promise.resolve({url: 'https://ds.example/downloadfile-cache/' + 'b'.repeat(64) + '.pdf?cacheToken=token'});
+            }
+        });
+    };
+
+    new harness.DocsAPI.DocEditor('placeholder', config);
+    await flushPromises();
+
+    assert.strictEqual(fetchCalls[0], 'https://ds.example/downloadfile-cache/register/doc-key');
+});
+
+test('PDF native iframe falls back to the source URL when cache registration fails', async function() {
+    var config = baseConfig(),
+        harness = makeHarness();
+
+    harness.window.fetch = function() {
+        return Promise.resolve({ok: false});
+    };
+
+    new harness.DocsAPI.DocEditor('placeholder', config);
+    var iframe = harness.getIframe();
+    assert.strictEqual(iframe.src, '');
+
+    await flushPromises();
+
+    assertNativePdf(iframe, config.document.url);
 });
 
 test('PDF non-form files still use native iframe when business passes fillforms mode or permission', function() {

@@ -1387,18 +1387,84 @@
     }
 
     function createNativePdfPreviewIframe(config, onLoad) {
-        var iframe = document.createElement("iframe");
+        var iframe = document.createElement("iframe"),
+            sourceUrl = config.document.url;
 
-        iframe.src = config.document.url;
-        previewTrace(config, "native-pdf-iframe-create", {
-            src: iframe.src,
-            nativePdf: true
-        });
         iframe.setAttribute("data-native-pdf-preview", "true");
         iframe.setAttribute("data-onlyoffice-native-pdf-preview", "true");
         iframe.onload = onLoad;
         setupIframe(iframe, config);
+        if (!registerNativePdfCache(config, iframe, sourceUrl)) {
+            setNativePdfPreviewSrc(config, iframe, sourceUrl, "native-pdf-iframe-create");
+        }
         return iframe;
+    }
+
+    function setNativePdfPreviewSrc(config, iframe, src, event) {
+        iframe.src = src;
+        previewTrace(config, event, {
+            src: iframe.src,
+            nativePdf: true
+        });
+    }
+
+    function getDocumentServerRootPath() {
+        return getBasePath().replace(/(?:\d+\.\d+\.\d+-[^\/]+\/)?web-apps\/apps\/?$/i, "");
+    }
+
+    function getNativePdfCacheDocId(config) {
+        var doc = config && config.document || {},
+            raw = doc.key || doc.title || "pdf-native-cache",
+            safe = String(raw).replace(/[^0-9A-Za-z_.=-]/g, "_");
+
+        return safe.substring(0, 200) || "pdf-native-cache";
+    }
+
+    function getNativePdfCacheRegisterUrl(config) {
+        return getDocumentServerRootPath() + "downloadfile-cache/register/" + encodeURIComponent(getNativePdfCacheDocId(config));
+    }
+
+    function registerNativePdfCache(config, iframe, sourceUrl) {
+        var token;
+
+        if (!window.fetch || getConfigFlag(config, 'nativePdfCache') === false)
+            return false;
+
+        token = config.document && config.document.token || config.token;
+        previewTrace(config, "native-pdf-cache-register", {
+            src: sourceUrl,
+            nativePdf: true
+        });
+
+        window.fetch(getNativePdfCacheRegisterUrl(config), {
+            method: "POST",
+            credentials: "include",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                documentUrl: sourceUrl,
+                fileType: config.document && config.document.fileType,
+                token: token
+            })
+        }).then(function(response) {
+            if (!response.ok)
+                throw new Error("Cannot register native PDF cache");
+            return response.json();
+        }).then(function(data) {
+            if (!data || !data.url)
+                throw new Error("Native PDF cache response has no URL");
+            setNativePdfPreviewSrc(config, iframe, data.url, "native-pdf-cache-hit-url");
+        }).catch(function(error) {
+            previewTrace(config, "native-pdf-cache-fallback", {
+                src: sourceUrl,
+                nativePdf: true,
+                error: error && error.message
+            });
+            setNativePdfPreviewSrc(config, iframe, sourceUrl, "native-pdf-iframe-create");
+        });
+
+        return true;
     }
 
     function setupIframe(iframe, config) {
