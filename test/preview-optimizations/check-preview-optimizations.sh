@@ -91,6 +91,11 @@ assert_lite_modules() {
 
 # PDF native iframe fast path.
 assert_contains "$API" "function shouldUseNativePdfPreview(config)"
+assert_contains "$API" "function isMobileNativePdfPreviewBrowser()"
+assert_contains "$API" "function isNativePdfPreviewBrowserType(config)"
+assert_contains "$API" "config.type !== 'mobile'"
+assert_contains "$API" "nav.userAgentData && nav.userAgentData.mobile === true"
+assert_contains "$API" "platform === 'MacIntel' && nav.maxTouchPoints > 1"
 assert_contains "$API" "config.document && config.document[name] !== undefined"
 assert_contains "$API" "getConfigFlag(config, 'openPdfInBrowser') !== false"
 assert_contains "$API" "getConfigFlag(config, 'openPdfAsBinary') !== true"
@@ -134,6 +139,10 @@ assert_contains "$REAL_PREVIEW_TEST" "function sanitizeUrlForReport(value)"
 assert_contains "$REAL_PREVIEW_TEST" "return '/document-url';"
 assert_contains "$REAL_PREVIEW_TEST" "'PDF must not open full editor path'"
 assert_contains "$REAL_PREVIEW_TEST" "'PDF must not use fillforms mode'"
+assert_contains "$ROOT/test/preview-optimizations/api-preview-optimizations.test.js" "PDF Windows, macOS, and Linux desktop browsers use native PDF"
+assert_contains "$ROOT/test/preview-optimizations/api-preview-optimizations.test.js" "PDF mobile browsers use the OnlyOffice read-only preview instead of native PDF"
+assert_contains "$ROOT/test/preview-optimizations/api-preview-optimizations.test.js" "PDF mobile browsers forced to desktop still do not use native PDF"
+assert_contains "$ROOT/test/preview-optimizations/api-preview-optimizations.test.js" "PDF mobile user agents do not use native PDF even with desktop config"
 
 # PDF binary open path.
 assert_contains "$API" "function shouldOpenPdfAsBinary(config)"

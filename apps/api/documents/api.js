@@ -1669,8 +1669,26 @@
                !hasEditOrReviewMode(config);
     }
 
+    function isMobileNativePdfPreviewBrowser() {
+        var nav = window.navigator || {},
+            userAgent = nav.userAgent || '',
+            platform = nav.platform || '';
+
+        if (nav.userAgentData && nav.userAgentData.mobile === true)
+            return true;
+
+        return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile/i.test(userAgent) ||
+               /iPad|iPhone|iPod/i.test(platform) ||
+               (platform === 'MacIntel' && nav.maxTouchPoints > 1);
+    }
+
+    function isNativePdfPreviewBrowserType(config) {
+        return !!(config && config.type !== 'mobile' && !isMobileNativePdfPreviewBrowser());
+    }
+
     function shouldUseNativePdfPreview(config) {
         return isPdfFile(config) &&
+               isNativePdfPreviewBrowserType(config) &&
                getConfigFlag(config, 'openPdfInBrowser') !== false &&
                getConfigFlag(config, 'openPdfAsBinary') !== true &&
                config.document && config.document.isForm !== true &&

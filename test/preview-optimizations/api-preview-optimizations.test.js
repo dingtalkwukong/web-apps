@@ -117,6 +117,14 @@ function makeHarness(options) {
     var elements = {};
     var storage = {};
     var scriptSrc = options && options.scriptSrc || 'https://ds.example/web-apps/apps/api/documents/api.js';
+    var navigator = {
+        userAgent: options && options.userAgent || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+        platform: options && options.platform || 'Win32',
+        maxTouchPoints: options && options.maxTouchPoints || 0
+    };
+    if (options && options.userAgentData) {
+        navigator.userAgentData = options.userAgentData;
+    }
     var harness = {
         created: [],
         replacements: [],
@@ -205,6 +213,7 @@ function makeHarness(options) {
             search: ''
         },
         parent: null,
+        navigator: navigator,
         localStorage: localStorage,
         alert: function(message) {
             throw new Error(message);
@@ -239,6 +248,7 @@ function makeHarness(options) {
         document: document,
         localStorage: localStorage,
         console: testConsole,
+        navigator: navigator,
         Image: ImageMock,
         JSON: JSON,
         Object: Object,
@@ -460,6 +470,103 @@ test('PDF non-form files still use native iframe when business passes fillforms 
 
         assertNativePdf(result.iframe, config.document.url);
         assert.strictEqual((result.harness.listeners.message || []).length, 0);
+    });
+});
+
+test('PDF Windows, macOS, and Linux desktop browsers use native PDF', function() {
+    var scenarios = [
+        {
+            name: 'Windows',
+            harnessOptions: {
+                userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+                platform: 'Win32'
+            }
+        },
+        {
+            name: 'macOS',
+            harnessOptions: {
+                userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15',
+                platform: 'MacIntel',
+                maxTouchPoints: 0
+            }
+        },
+        {
+            name: 'Linux',
+            harnessOptions: {
+                userAgent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+                platform: 'Linux x86_64'
+            }
+        }
+    ];
+
+    scenarios.forEach(function(scenario) {
+        var config = baseConfig();
+        var harness = makeHarness(scenario.harnessOptions);
+
+        new harness.DocsAPI.DocEditor('placeholder', config);
+
+        assertNativePdf(harness.getIframe(), config.document.url, scenario.name);
+    });
+});
+
+test('PDF mobile browsers use the OnlyOffice read-only preview instead of native PDF', function() {
+    var config = baseConfig({
+        type: 'mobile'
+    });
+    var result = createEditor(config);
+
+    assertNoNativePdf(result.iframe, config.document.url);
+    assert.match(result.iframe.src, /\/documenteditor\/mobile\/index\.html/);
+    assert.match(result.iframe.src, /[?&]mode=view(?:&|$)/);
+});
+
+test('PDF mobile browsers forced to desktop still do not use native PDF', function() {
+    var config = baseConfig({
+        type: 'mobile'
+    });
+    var harness = makeHarness();
+
+    harness.window.localStorage.setItem('asc-force-editor-type', 'desktop');
+    new harness.DocsAPI.DocEditor('placeholder', config);
+
+    var iframe = harness.getIframe();
+    assertNoNativePdf(iframe, config.document.url);
+    assert.match(iframe.src, /\/pdfeditor\/main\/index\.html/);
+    assert.match(iframe.src, /[?&]mode=view(?:&|$)/);
+});
+
+test('PDF mobile user agents do not use native PDF even with desktop config', function() {
+    var scenarios = [
+        {
+            name: 'Android',
+            harnessOptions: {
+                userAgent: 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36',
+                platform: 'Linux armv8l',
+                userAgentData: {
+                    mobile: true
+                }
+            }
+        },
+        {
+            name: 'iPadOS desktop UA',
+            harnessOptions: {
+                userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15',
+                platform: 'MacIntel',
+                maxTouchPoints: 5
+            }
+        }
+    ];
+
+    scenarios.forEach(function(scenario) {
+        var config = baseConfig();
+        var harness = makeHarness(scenario.harnessOptions);
+
+        new harness.DocsAPI.DocEditor('placeholder', config);
+
+        var iframe = harness.getIframe();
+        assertNoNativePdf(iframe, config.document.url);
+        assert.match(iframe.src, /\/pdfeditor\/main\/index\.html/, scenario.name);
+        assert.match(iframe.src, /[?&]mode=view(?:&|$)/, scenario.name);
     });
 });
 
